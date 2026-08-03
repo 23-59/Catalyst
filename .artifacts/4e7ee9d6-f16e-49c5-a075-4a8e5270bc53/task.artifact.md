@@ -1,0 +1,8 @@
+- [x] Recreate `SplashScreen.kt`
+- [x] Restore splash screen states in `TodoViewModel.kt`
+- [x] Restore original activity logic in `MainActivity.kt`
+- [x] Restore original theme logic in `Theme.kt`
+- [x] Restore original background and insets in `TodoApp.kt`
+- [x] Restore original XML themes
+- [x] Verify build and UI
+- [x] Create walkthrough

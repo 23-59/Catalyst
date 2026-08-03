@@ -1,0 +1,1 @@
+sed -i 's/modifier: Modifier = Modifier,/modifier: Modifier = Modifier,\n    isMultiSelectMode: Boolean = false,\n    isSelected: Boolean = false,\n    onSelect: () -> Unit = {},\n    onLongClick: () -> Unit = {},/' app/src/main/java/com/example/ui/TodoApp.kt

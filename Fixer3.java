@@ -1,0 +1,1 @@
+import java.nio.file.*; public class Fixer3 { public static void main(String[] args) throws Exception { String c = new String(Files.readAllBytes(Paths.get(" app/src/main/java/com/example/ui/TodoApp.kt\))); int o=0; int cl=0; for(char ch: c.toCharArray()){ if(ch=='{') o++; else if(ch=='}' ) cl++; } System.out.println(\Open: \+o+\ Close: \+cl); } }
