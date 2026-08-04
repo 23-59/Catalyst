@@ -351,13 +351,19 @@ fun InsightsContent(viewModel: TodoViewModel, todos: List<TodoItem>, categories:
         RecordedTimeItem.parseList(freeSessionsSerialized)
     }
 
-    val totalElapsedTime = remember(todos, freeSessionRecords, startMs, endMs) {
+    val focusLengthMs by viewModel.focusLength.collectAsState()
+    
+    val totalElapsedTime = remember(todos, freeSessionRecords, startMs, endMs, focusLengthMs) {
         val taskTime = todos.sumOf { todo ->
             val records = RecordedTimeItem.parseList(todo.recordedTimes)
-            records.filter { !it.isPomodoro && it.timestamp in startMs..endMs }.sumOf { it.value }
+            records.filter { it.timestamp in startMs..endMs }.sumOf { 
+                if (it.isPomodoro) it.value * focusLengthMs else it.value
+            }
         }
-        val freeStopwatchTime = freeSessionRecords.filter { !it.isPomodoro && it.timestamp in startMs..endMs }.sumOf { it.value }
-        taskTime + freeStopwatchTime
+        val freeTime = freeSessionRecords.filter { it.timestamp in startMs..endMs }.sumOf { 
+            if (it.isPomodoro) it.value * focusLengthMs else it.value
+        }
+        taskTime + freeTime
     }
     val totalHours = totalElapsedTime / 3600000
     val totalMinutes = (totalElapsedTime % 3600000) / 60000

@@ -32,6 +32,16 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     var previousScreenState = mutableStateOf("Tasks")
     private val database = TodoDatabase.getDatabase(application, viewModelScope)
     private val repository = TodoRepository(database.todoDao(), database.categoryDao(), database.noteDao())
+    val selectedFocusTodo: StateFlow<TodoItem?> = combine(
+        com.goldenminute.catalyst.ui.TimerStateManager.activeTaskId,
+        repository.allTodos
+    ) { activeId, todos ->
+        if (activeId != -1) {
+            todos.find { it.id == activeId }
+        } else {
+            null
+        }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, null)
 
     init {
         checkAndResetDailyTasks()
@@ -80,6 +90,7 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+        
     }
 
     fun checkAndResetDailyTasks() {
@@ -154,6 +165,54 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun saveCurrentTimerSession(context: Context) {
+        val todo = selectedFocusTodo.value
+        val isPom = isPomodoro.value
+        val elapsed = timeElapsed.value
+        
+        if (todo != null) {
+            if (isPom) {
+                val newRecord = com.goldenminute.catalyst.data.RecordedTimeItem(
+                    isPomodoro = true,
+                    value = 1L,
+                    timestamp = System.currentTimeMillis()
+                )
+                addSessionRecords(todo.id, listOf(newRecord))
+            } else {
+                if (elapsed > 0) {
+                    val newRecord = com.goldenminute.catalyst.data.RecordedTimeItem(
+                        isPomodoro = false,
+                        value = elapsed,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    addSessionRecords(todo.id, listOf(newRecord))
+                }
+            }
+        } else if (TimerStateManager.isIdleMode.value) {
+            if (isPom) {
+                val newRecord = com.goldenminute.catalyst.data.RecordedTimeItem(
+                    isPomodoro = true,
+                    value = 1L,
+                    timestamp = System.currentTimeMillis()
+                )
+                addFreeModeFocusSession(newRecord)
+            } else {
+                if (elapsed > 0) {
+                    val newRecord = com.goldenminute.catalyst.data.RecordedTimeItem(
+                        isPomodoro = false,
+                        value = elapsed,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    addFreeModeFocusSession(newRecord)
+                }
+            }
+            android.widget.Toast.makeText(context, context.getString(com.goldenminute.catalyst.R.string.free_focus_session_saved), android.widget.Toast.LENGTH_SHORT).show()
+        }
+        
+        TimerStateManager.isTimerRunning.value = false
+        TimerStateManager.timeElapsed.value = 0L
+    }
+
     val aiInsight = MutableStateFlow<String?>(null)
     val isAiLoading = MutableStateFlow(false)
     
@@ -169,7 +228,6 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                 
                 val now = Calendar.getInstance().timeInMillis
                 val oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000L
-                val recentCompleted = todos.filter { it.isCompleted && it.completedDate != null && it.completedDate > oneWeekAgo }
                 
                 val appContext = "Current Date: ${SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(now))}, Daily Focus Goal: ${dailyFocusGoalHours.value} hours"
                 
@@ -180,13 +238,31 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                     "- Task: ${it.title} | Priority: $priorityStr | Due: $dueStr | Daily: ${it.isDaily} | Completed: ${it.isCompleted} | Category: $catName | Desc: ${it.description.take(50)}"
                 }
                 
-                val focusData = if (recentCompleted.isNotEmpty()) {
-                    recentCompleted.joinToString("\n") { 
-                        val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(it.completedDate!!))
-                        "- Task: ${it.title} | Completed At: $dateStr | Focus Time: ${it.elapsedTime / 60000} mins | Pomodoros: ${it.pomodoroCycles}"
+                val recentRecords = mutableListOf<String>()
+                val focusLen = focusLength.value
+                
+                todos.forEach { todo ->
+                    val recs = com.goldenminute.catalyst.data.RecordedTimeItem.parseList(todo.recordedTimes)
+                    recs.filter { it.timestamp > oneWeekAgo }.forEach { r ->
+                        val dateStr = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(r.timestamp))
+                        val typeStr = if (r.isPomodoro) "Pomodoro (${focusLen / 60000}m)" else "Stopwatch"
+                        val valStr = if (r.isPomodoro) "${r.value} cycle(s)" else "${r.value / 60000}m"
+                        recentRecords.add("- [$dateStr] Task '${todo.title}': $typeStr - $valStr")
                     }
+                }
+                
+                val freeRecords = com.goldenminute.catalyst.data.RecordedTimeItem.parseList(freeModeSessions.value)
+                freeRecords.filter { it.timestamp > oneWeekAgo }.forEach { r ->
+                    val dateStr = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(r.timestamp))
+                    val typeStr = if (r.isPomodoro) "Pomodoro (${focusLen / 60000}m)" else "Stopwatch"
+                    val valStr = if (r.isPomodoro) "${r.value} cycle(s)" else "${r.value / 60000}m"
+                    recentRecords.add("- [$dateStr] Free Session: $typeStr - $valStr")
+                }
+                
+                val focusData = if (recentRecords.isNotEmpty()) {
+                    recentRecords.sorted().joinToString("\n")
                 } else {
-                    "No completed tasks in the last 7 days."
+                    "No focus sessions recorded in the last 7 days."
                 }
                 
                 var prompt = userAiHubPrompt.value
@@ -444,8 +520,7 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     val pomodoroMode = TimerStateManager.pomodoroMode // "Focus", "Short Break", "Long Break"
     val timeLeft = TimerStateManager.timeLeft
     val timeElapsed = TimerStateManager.timeElapsed
-    val selectedFocusTodo = MutableStateFlow<TodoItem?>(null)
-    val isIdleMode = MutableStateFlow(false)
+    val isIdleMode = TimerStateManager.isIdleMode
     
     fun setPomodoroMode(mode: String) {
         TimerStateManager.setPomodoroMode(mode)
@@ -652,9 +727,7 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                 recordedTimes = com.goldenminute.catalyst.data.RecordedTimeItem.serializeList(existingList)
             )
             repository.updateTodo(updatedTodo)
-            if (selectedFocusTodo.value?.id == todoId) {
-                selectedFocusTodo.value = updatedTodo
-            }
+
         }
     }
 
@@ -678,9 +751,7 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                     recordedTimes = com.goldenminute.catalyst.data.RecordedTimeItem.serializeList(existingList)
                 )
                 repository.updateTodo(updatedTodo)
-                if (selectedFocusTodo.value?.id == todoId) {
-                    selectedFocusTodo.value = updatedTodo
-                }
+
             }
         }
     }
@@ -689,6 +760,8 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val completedDate = if (isCompleted) System.currentTimeMillis() else null
             repository.updateCompletionStatus(todoId, isCompleted, completedDate)
+            repository.updateAllSubTasksCompletion(todoId, isCompleted)
+            
             if (isCompleted) {
                 ReminderScheduler.cancel(getApplication(), todoId)
             } else {

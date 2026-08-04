@@ -27,6 +27,8 @@ object TimerStateManager {
     val timeLeft = MutableStateFlow(25 * 60 * 1000L)
     val timeElapsed = MutableStateFlow(0L)
     val pomodoroCycle = MutableStateFlow(0) // Cycles completed (0 to 3)
+    val activeTaskId = MutableStateFlow(-1)
+    val isIdleMode = MutableStateFlow(false)
 
     private var targetEndTime = 0L
     private var startTime = 0L
@@ -43,6 +45,8 @@ object TimerStateManager {
             isPomodoro.value = prefs[DataStoreKeys.IS_POMODORO] ?: true
             pomodoroMode.value = prefs[DataStoreKeys.POMODORO_MODE] ?: "Focus"
             pomodoroCycle.value = prefs[DataStoreKeys.POMODORO_CYCLE] ?: 0
+            activeTaskId.value = prefs[DataStoreKeys.ACTIVE_TASK_ID] ?: -1
+            isIdleMode.value = prefs[DataStoreKeys.IS_IDLE_MODE] ?: false
             
             val running = prefs[DataStoreKeys.IS_TIMER_RUNNING] ?: false
             val isServiceActive = com.goldenminute.catalyst.service.TimerService.isServiceRunning
@@ -100,6 +104,8 @@ object TimerStateManager {
             }
             launch { isPomodoro.collect { saveState() } }
             launch { pomodoroMode.collect { saveState() } }
+            launch { activeTaskId.collect { saveState() } }
+            launch { isIdleMode.collect { saveState() } }
 
             // Precise update loop that handles sleep / doze mode seamlessly
             while (true) {
@@ -144,6 +150,8 @@ object TimerStateManager {
                     prefs[DataStoreKeys.TIME_LEFT] = timeLeft.value
                     prefs[DataStoreKeys.TIME_ELAPSED] = timeElapsed.value
                     prefs[DataStoreKeys.POMODORO_CYCLE] = pomodoroCycle.value
+                    prefs[DataStoreKeys.ACTIVE_TASK_ID] = activeTaskId.value
+                    prefs[DataStoreKeys.IS_IDLE_MODE] = isIdleMode.value
                     prefs[DataStoreKeys.TARGET_END_TIME] = targetEndTime
                     prefs[DataStoreKeys.START_TIME] = startTime
                     prefs[DataStoreKeys.TIMER_FOCUS_LENGTH] = focusLength.value

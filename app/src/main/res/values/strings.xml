@@ -55,6 +55,8 @@
     <string name="delete_task_message">Are you sure you want to permanently delete this task?</string>
     <string name="delete_note_title">Delete Note</string>
     <string name="delete_note_message">Are you sure you want to permanently delete this note?</string>
+    <string name="delete_tag_title">Delete Tag</string>
+    <string name="delete_tag_confirm">Are you sure you want to delete the tag "%1$s"? Tasks and notes with this tag will be untagged.</string>
     <string name="task_deleted">Task deleted</string>
     <string name="note_deleted">Note deleted</string>
     <string name="journal_entries_deleted">%1$d journal entries deleted</string>

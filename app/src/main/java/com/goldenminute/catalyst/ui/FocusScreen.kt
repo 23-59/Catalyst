@@ -67,6 +67,7 @@ fun FocusScreen(
     var lastRecordedTimeElapsed by remember { mutableLongStateOf(0L) }
     var isAssignedToTask by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val freeModeSessionsStr by viewModel.freeModeSessions.collectAsState()
 
     // POST_NOTIFICATIONS permission launcher (Android 13+)
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -282,10 +283,16 @@ fun FocusScreen(
         }
 
         // --- REDESIGNED RECORDS SECTION ---
-        val dbRecords = selectedTodo?.recordedTimes?.let { com.goldenminute.catalyst.data.RecordedTimeItem.parseList(it) } ?: emptyList()
+        val dbRecords = if (selectedTodo != null) {
+            selectedTodo!!.recordedTimes.let { com.goldenminute.catalyst.data.RecordedTimeItem.parseList(it) }
+        } else if (isIdleMode) {
+            com.goldenminute.catalyst.data.RecordedTimeItem.parseList(freeModeSessionsStr)
+        } else {
+            emptyList()
+        }
         val activeDbRecords = dbRecords.filter { it.isPomodoro == isPomodoro }
         
-        if (selectedTodo != null) {
+        if (selectedTodo != null || isIdleMode) {
             Spacer(modifier = Modifier.height(16.dp))
             Card(
                 modifier = Modifier
@@ -654,7 +661,7 @@ fun FocusScreen(
                             if (selectedTodo != null && !selectedTodo!!.isCompleted) {
                                 viewModel.toggleTodoCompleted(selectedTodo!!.id, !selectedTodo!!.isCompleted)
                                 viewModel.isTimerRunning.value = false
-                                viewModel.selectedFocusTodo.value = null
+                                TimerStateManager.activeTaskId.value = -1
                             }
                         }
                 ) {
@@ -671,11 +678,19 @@ fun FocusScreen(
         Spacer(modifier = Modifier.height(32.dp))
 
         // Task Selection
-        if (incompleteTodos.isEmpty() && selectedTodo == null && !isIdleMode) {
+        Text(
+            text = stringResource(R.string.select_a_task_to_focus_on),
+            style = MaterialTheme.typography.titleMedium,
+            color = TextPrimary,
+            modifier = Modifier.align(Alignment.Start)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (incompleteTodos.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(32.dp),
+                    .padding(vertical = 16.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -685,130 +700,68 @@ fun FocusScreen(
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
             }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(SlateDark)
-                    .clickable { viewModel.isIdleMode.value = true }
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+        }
+
+        Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(bottom = 80.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .border(2.dp, TextSecondary, CircleShape)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = stringResource(R.string.idle_state_focus),
-                    color = TextPrimary,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            }
-        } else {
-            if (selectedTodo == null && !isIdleMode) {
-                Text(
-                    text = stringResource(R.string.select_a_task_to_focus_on),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary,
-                    modifier = Modifier.align(Alignment.Start)
-                )
-            } else {
-                Text(
-                    text = stringResource(R.string.currently_focusing_on),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary,
-                    modifier = Modifier.align(Alignment.Start)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+                // Idle State Item
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .border(1.dp, NeonCyan.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                        .background(SlateDark)
+                        .background(if (isIdleMode) NeonCyan.copy(alpha = 0.2f) else SlateDark)
                         .clickable { 
-                            viewModel.selectedFocusTodo.value = null 
-                            viewModel.isIdleMode.value = false
-                        } // Unselect
+                            TimerStateManager.isIdleMode.value = true
+                            TimerStateManager.activeTaskId.value = -1
+                        }
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        if (isIdleMode) Icons.Default.SelfImprovement else Icons.Default.TaskAlt, 
-                        contentDescription = null, 
-                        tint = NeonCyan
-                    )
+                    if (isIdleMode) {
+                        Icon(Icons.Default.RadioButtonChecked, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(24.dp))
+                    } else {
+                        Icon(Icons.Default.RadioButtonUnchecked, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(24.dp))
+                    }
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = if (isIdleMode) stringResource(R.string.idle_state_focus) else selectedTodo!!.title,
-                        color = TextPrimary,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold
+                        text = stringResource(R.string.idle_state_focus),
+                        color = if (isIdleMode) NeonCyan else TextPrimary,
+                        style = MaterialTheme.typography.bodyLarge
                     )
                 }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.padding(bottom = 80.dp)
-            ) {
-                if (selectedTodo == null && !isIdleMode) {
+
+                // Tasks
+                incompleteTodos.forEach { item ->
+                    val isSelected = selectedTodo?.id == item.id
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(SlateDark)
-                            .clickable { viewModel.isIdleMode.value = true }
+                            .background(if (isSelected) NeonCyan.copy(alpha = 0.2f) else SlateDark)
+                            .clickable { 
+                                TimerStateManager.activeTaskId.value = item.id
+                                TimerStateManager.isIdleMode.value = false
+                            }
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .border(2.dp, TextSecondary, CircleShape)
-                        )
+                        if (isSelected) {
+                            Icon(Icons.Default.RadioButtonChecked, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(24.dp))
+                        } else {
+                            Icon(Icons.Default.RadioButtonUnchecked, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(24.dp))
+                        }
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = stringResource(R.string.idle_state_focus),
-                            color = TextPrimary,
+                            text = item.title,
+                            color = if (isSelected) NeonCyan else TextPrimary,
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
                 }
-                incompleteTodos.forEach { item ->
-                    if (selectedTodo?.id != item.id) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(SlateDark)
-                                .clickable { 
-                                    viewModel.selectedFocusTodo.value = item 
-                                    viewModel.isIdleMode.value = false
-                                }
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .border(2.dp, TextSecondary, CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = item.title,
-                                color = TextPrimary,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                        }
-                    }
-                }
             }
-        }
+
         if (showSettingsDialog) {
             AppAlertDialog(
                 onDismissRequest = { 

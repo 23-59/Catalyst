@@ -18,9 +18,11 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import com.goldenminute.catalyst.data.DataStoreKeys
 import com.goldenminute.catalyst.data.appDataStore
+import androidx.datastore.preferences.core.edit
 
 class TimerService : Service() {
 
@@ -34,25 +36,7 @@ class TimerService : Service() {
     private var isObserving = false
     private var wakeLock: PowerManager.WakeLock? = null
 
-    private val actionReceiver = object : android.content.BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            when (intent?.action) {
-                "ACTION_STOP_TIMER" -> {
-                    TimerStateManager.resetCurrentMode()
-                    stopSelf()
-                }
-                "ACTION_PAUSE_TIMER" -> {
-                    TimerStateManager.isTimerRunning.value = false
-                }
-                "ACTION_RESUME_TIMER" -> {
-                    TimerStateManager.isTimerRunning.value = true
-                }
-                "ACTION_DISMISS_NOTIFICATION" -> {
-                    stopSelf()
-                }
-            }
-        }
-    }
+    // Actions are now handled in onStartCommand directly.
 
     override fun onCreate() {
         super.onCreate()
@@ -66,40 +50,125 @@ class TimerService : Service() {
             acquire()
         }
 
-        val filter = android.content.IntentFilter().apply {
-            addAction("ACTION_STOP_TIMER")
-            addAction("ACTION_PAUSE_TIMER")
-            addAction("ACTION_RESUME_TIMER")
-            addAction("ACTION_DISMISS_NOTIFICATION")
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(actionReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(actionReceiver, filter)
-        }
+        // Receiver removed, using onStartCommand for actions instead
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForegroundServiceWithNotification()
+        when (intent?.action) {
+            "ACTION_STOP_TIMER" -> {
+                TimerStateManager.resetCurrentMode()
+                stopSelf()
+            }
+            "ACTION_PAUSE_TIMER" -> {
+                TimerStateManager.isTimerRunning.value = false
+            }
+            "ACTION_RESUME_TIMER" -> {
+                TimerStateManager.isTimerRunning.value = true
+            }
+            "ACTION_DISMISS_NOTIFICATION" -> {
+                stopSelf()
+            }
+            "ACTION_SAVE_TIMER" -> {
+                handleSaveTimer()
+            }
+        }
         
-        if (!isObserving) {
-            isObserving = true
-            observeTimerState()
+        if (intent?.action == null || intent.action == "ACTION_START_TIMER") {
+            startForegroundServiceWithNotification()
+            
+            if (!isObserving) {
+                isObserving = true
+                observeTimerState()
+            }
         }
 
         return START_STICKY
+    }
+
+    private fun handleSaveTimer() {
+        val activeId = TimerStateManager.activeTaskId.value
+        val isIdle = TimerStateManager.isIdleMode.value
+        val isPom = TimerStateManager.isPomodoro.value
+        val elapsed = TimerStateManager.timeElapsed.value
+        
+        val database = com.goldenminute.catalyst.data.TodoDatabase.getDatabase(applicationContext, serviceScope)
+        val repository = com.goldenminute.catalyst.data.TodoRepository(database.todoDao(), database.categoryDao(), database.noteDao())
+        
+        serviceScope.launch {
+            if (activeId != -1) {
+                val newRecords = mutableListOf<com.goldenminute.catalyst.data.RecordedTimeItem>()
+                if (isPom) {
+                    newRecords.add(com.goldenminute.catalyst.data.RecordedTimeItem(
+                        isPomodoro = true, value = 1L, timestamp = System.currentTimeMillis()
+                    ))
+                } else if (elapsed > 0) {
+                    newRecords.add(com.goldenminute.catalyst.data.RecordedTimeItem(
+                        isPomodoro = false, value = elapsed, timestamp = System.currentTimeMillis()
+                    ))
+                }
+                
+                if (newRecords.isNotEmpty()) {
+                    val todo = repository.getTodoById(activeId)
+                    if (todo != null) {
+                        val existingList = com.goldenminute.catalyst.data.RecordedTimeItem.parseList(todo.recordedTimes).toMutableList()
+                        existingList.addAll(newRecords)
+                        
+                        var extraTime = 0L
+                        var extraCycles = 0
+                        for (rec in newRecords) {
+                            if (rec.isPomodoro) extraCycles += rec.value.toInt()
+                            else extraTime += rec.value
+                        }
+                        
+                        val updatedTodo = todo.copy(
+                            elapsedTime = todo.elapsedTime + extraTime,
+                            pomodoroCycles = todo.pomodoroCycles + extraCycles,
+                            recordedTimes = com.goldenminute.catalyst.data.RecordedTimeItem.serializeList(existingList)
+                        )
+                        database.todoDao().updateTodo(updatedTodo)
+                    }
+                }
+            } else if (isIdle) {
+                var newRecord: com.goldenminute.catalyst.data.RecordedTimeItem? = null
+                if (isPom) {
+                    newRecord = com.goldenminute.catalyst.data.RecordedTimeItem(
+                        isPomodoro = true, value = 1L, timestamp = System.currentTimeMillis()
+                    )
+                } else if (elapsed > 0) {
+                    newRecord = com.goldenminute.catalyst.data.RecordedTimeItem(
+                        isPomodoro = false, value = elapsed, timestamp = System.currentTimeMillis()
+                    )
+                }
+                
+                if (newRecord != null) {
+                    val currentListStr = applicationContext.appDataStore.data.first()[DataStoreKeys.FREE_MODE_SESSIONS] ?: ""
+                    val currentList = com.goldenminute.catalyst.data.RecordedTimeItem.parseList(currentListStr).toMutableList()
+                    currentList.add(newRecord)
+                    val serialized = com.goldenminute.catalyst.data.RecordedTimeItem.serializeList(currentList)
+                    applicationContext.appDataStore.edit { it[DataStoreKeys.FREE_MODE_SESSIONS] = serialized }
+                    
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(applicationContext, applicationContext.getString(R.string.free_focus_session_saved), android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            
+            TimerStateManager.isTimerRunning.value = false
+            TimerStateManager.timeElapsed.value = 0L
+            stopSelf()
+        }
     }
 
     private fun observeTimerState() {
         serviceScope.launch {
             combine(
                 TimerStateManager.isTimerRunning,
-                TimerStateManager.timeLeft,
-                TimerStateManager.timeElapsed,
+                TimerStateManager.timeLeft.map { it / 1000 },
+                TimerStateManager.timeElapsed.map { it / 1000 },
                 TimerStateManager.isPomodoro,
                 TimerStateManager.pomodoroMode
-            ) { isRunning, left, elapsed, isPom, mode ->
-                TimerStateData(isRunning, left, elapsed, isPom, mode)
+            ) { isRunning, leftSec, elapsedSec, isPom, mode ->
+                TimerStateData(isRunning, leftSec, elapsedSec, isPom, mode)
             }
             .distinctUntilChanged()
             .collect { state ->
@@ -146,28 +215,25 @@ class TimerService : Service() {
             }, PendingIntent.FLAG_IMMUTABLE
         )
 
-        val stopIntent = Intent("ACTION_STOP_TIMER").setPackage(packageName)
-        val stopPendingIntent = PendingIntent.getBroadcast(
+        val stopIntent = Intent(this, TimerService::class.java).apply { action = "ACTION_STOP_TIMER" }
+        val stopPendingIntent = PendingIntent.getService(
             this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE
         )
         
         val pauseResumeAction = if (state.isRunning) "ACTION_PAUSE_TIMER" else "ACTION_RESUME_TIMER"
         val prRequestCode = if (state.isRunning) 2 else 4
-        val pauseIntent = Intent(pauseResumeAction).setPackage(packageName)
-        val pausePendingIntent = PendingIntent.getBroadcast(
+        val pauseIntent = Intent(this, TimerService::class.java).apply { action = pauseResumeAction }
+        val pausePendingIntent = PendingIntent.getService(
             this, prRequestCode, pauseIntent, PendingIntent.FLAG_IMMUTABLE
         )
 
-        val saveIntent = Intent(this, MainActivity::class.java).apply {
-            action = "ACTION_SAVE_TIMER"
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val savePendingIntent = PendingIntent.getActivity(
+        val saveIntent = Intent(this, TimerService::class.java).apply { action = "ACTION_SAVE_TIMER" }
+        val savePendingIntent = PendingIntent.getService(
             this, 3, saveIntent, PendingIntent.FLAG_IMMUTABLE
         )
         
-        val deleteIntent = Intent("ACTION_DISMISS_NOTIFICATION").setPackage(packageName)
-        val deletePendingIntent = PendingIntent.getBroadcast(
+        val deleteIntent = Intent(this, TimerService::class.java).apply { action = "ACTION_DISMISS_NOTIFICATION" }
+        val deletePendingIntent = PendingIntent.getService(
             this, 5, deleteIntent, PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -194,12 +260,17 @@ class TimerService : Service() {
             if (isFa) "کرنومتر" else "Stopwatch"
         }
         
-        val timeValue = if (state.isPomodoro) state.timeLeft else state.timeElapsed
+        val timeValueSeconds = if (state.isPomodoro) state.timeLeft else state.timeElapsed
         
-        val totalSeconds = (timeValue / 1000).toInt()
-        val minutes = totalSeconds / 60
-        val seconds = totalSeconds % 60
-        val contentText = String.format("%02d:%02d", minutes, seconds)
+        val hours = timeValueSeconds / 3600
+        val minutes = (timeValueSeconds % 3600) / 60
+        val seconds = timeValueSeconds % 60
+        
+        val contentText = if (hours > 0) {
+            String.format("%02d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format("%02d:%02d", minutes, seconds)
+        }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
@@ -237,7 +308,6 @@ class TimerService : Service() {
             if (it.isHeld) it.release()
         }
         wakeLock = null
-        unregisterReceiver(actionReceiver)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

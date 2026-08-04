@@ -44,6 +44,8 @@ object DataStoreKeys {
     val TIMER_FOCUS_LENGTH = longPreferencesKey("focusLength")
     val TIMER_SHORT_BREAK_LENGTH = longPreferencesKey("shortBreakLength")
     val TIMER_LONG_BREAK_LENGTH = longPreferencesKey("longBreakLength")
+    val ACTIVE_TASK_ID = intPreferencesKey("activeTaskId")
+    val IS_IDLE_MODE = booleanPreferencesKey("isIdleMode")
 }
 
 
