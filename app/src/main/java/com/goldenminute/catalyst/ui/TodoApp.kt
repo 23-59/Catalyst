@@ -1464,7 +1464,8 @@ fun TodoApp(viewModel: TodoViewModel) {
                                 categories = taskCategories,
                                 selectedId = selectedCatId,
                                 onSelectId = { viewModel.selectedCategoryId.value = it },
-                                onAddCategoryClick = { showAddCategoryDialog = "task" }
+                                onAddCategoryClick = { showAddCategoryDialog = "task" },
+                                onDeleteCategory = { viewModel.deleteCategory(it) }
                             )
 
                             Spacer(modifier = Modifier.height(12.dp))
@@ -1839,6 +1840,7 @@ fun TodoApp(viewModel: TodoViewModel) {
                     noteToEdit = null
                 },
                 onAddCategoryClick = { showAddCategoryDialog = "note" },
+                onDeleteCategory = { viewModel.deleteCategory(it) },
                 onConfirm = { title, content, colorIndex, categoryId ->
                     viewModel.insertNote(
                         NoteItem(
@@ -2468,7 +2470,7 @@ fun StatsBanner(stats: TodoStats, onProgressClick: () -> Unit = {}) {
                     Canvas(modifier = Modifier.size(46.dp)) {
                         val stroke = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
                         drawCircle(
-                            color = BorderColor,
+                            color = TextPrimary.copy(alpha = 0.4f),
                             radius = size.minDimension / 2 - stroke.width / 2,
                             style = stroke
                         )
@@ -2600,8 +2602,49 @@ fun CategoryRowSelector(
     categories: List<Category>,
     selectedId: Int?,
     onSelectId: (Int?) -> Unit,
-    onAddCategoryClick: () -> Unit
+    onAddCategoryClick: () -> Unit,
+    onDeleteCategory: ((Category) -> Unit)? = null
 ) {
+    var categoryPendingDelete by remember { mutableStateOf<Category?>(null) }
+
+    // Confirm-delete dialog
+    if (categoryPendingDelete != null) {
+        val cat = categoryPendingDelete!!
+        AppAlertDialog(
+            onDismissRequest = { categoryPendingDelete = null },
+            containerColor = SlateDark,
+            title = {
+                Text(
+                    stringResource(R.string.delete_tag_title),
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    stringResource(R.string.delete_tag_confirm, cat.name),
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDeleteCategory?.invoke(cat)
+                    if (selectedId == cat.id) onSelectId(null)
+                    categoryPendingDelete = null
+                }) {
+                    Text(stringResource(R.string.delete_button), color = PriorityHigh)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { categoryPendingDelete = null }) {
+                    Text(stringResource(R.string.cancel), color = TextSecondary)
+                }
+            }
+        )
+    }
+
     Column {
         Text(
             text = stringResource(R.string.categories),
@@ -2636,7 +2679,7 @@ fun CategoryRowSelector(
                 val isSelected = selectedId == cat.id
                 val colorHex = remember(cat.colorHex) { safeParseColor(cat.colorHex) }
 
-                FilterChip(
+                InputChip(
                     selected = isSelected,
                     onClick = { onSelectId(cat.id) },
                     label = {
@@ -2662,7 +2705,19 @@ fun CategoryRowSelector(
                             Text(catDisplayName)
                         }
                     },
-                    colors = FilterChipDefaults.filterChipColors(
+                    trailingIcon = if (onDeleteCategory != null) {
+                        {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.delete_tag_title),
+                                modifier = Modifier
+                                    .size(14.dp)
+                                    .clickable { categoryPendingDelete = cat },
+                                tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else TextSecondary
+                            )
+                        }
+                    } else null,
+                    colors = InputChipDefaults.inputChipColors(
                         selectedContainerColor = colorHex,
                         selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
                         containerColor = SlateDark,
@@ -4214,7 +4269,7 @@ fun TodoCard(
                                 .height(6.dp)
                                 .clip(RoundedCornerShape(3.dp)),
                             color = NeonCyan,
-                            trackColor = SlateLight.copy(alpha = 0.5f)
+                            trackColor = TextPrimary.copy(alpha = 0.25f)
                         )
                     }
                 }
@@ -5428,9 +5483,9 @@ fun AddTaskScreen(
 
     
     if (showTimePicker) {
-        val initialHour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
-        val initialMinute = calendar.get(java.util.Calendar.MINUTE)
-        val timePickerState = androidx.compose.material3.rememberTimePickerState(
+        val initialHour = calendar.get(Calendar.HOUR_OF_DAY)
+        val initialMinute = calendar.get(Calendar.MINUTE)
+        val timePickerState = rememberTimePickerState(
             initialHour = initialHour,
             initialMinute = initialMinute,
             is24Hour = isPersian
@@ -5439,9 +5494,9 @@ fun AddTaskScreen(
         AppAlertDialog(
             onDismissRequest = { showTimePicker = false },
             confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
-                    calendar.set(java.util.Calendar.HOUR_OF_DAY, timePickerState.hour)
-                    calendar.set(java.util.Calendar.MINUTE, timePickerState.minute)
+                TextButton(onClick = {
+                    calendar.set(Calendar.HOUR_OF_DAY, timePickerState.hour)
+                    calendar.set(Calendar.MINUTE, timePickerState.minute)
                     calendar.set(java.util.Calendar.SECOND, 0)
                     calendar.set(java.util.Calendar.MILLISECOND, 0)
                     val sdf = java.text.SimpleDateFormat("h:mm a", getSystemLocale())
@@ -6680,7 +6735,8 @@ fun AddTaskScreen(
         categories: List<Category>,
         onDismiss: () -> Unit,
         onConfirm: (title: String, content: String, colorIndex: Int, categoryId: Int?) -> Unit,
-        onAddCategoryClick: () -> Unit
+        onAddCategoryClick: () -> Unit,
+        onDeleteCategory: ((Category) -> Unit)? = null
     ) {
         var title by remember { mutableStateOf(noteToEdit?.title ?: "") }
         var content by remember { mutableStateOf(noteToEdit?.content ?: "") }
@@ -6944,7 +7000,8 @@ fun AddTaskScreen(
                                 categories = categories,
                                 selectedId = selectedCategoryId,
                                 onSelectId = { selectedCategoryId = it },
-                                onAddCategoryClick = onAddCategoryClick
+                                onAddCategoryClick = onAddCategoryClick,
+                                onDeleteCategory = onDeleteCategory
                             )
 
                         Spacer(modifier = Modifier.height(16.dp))

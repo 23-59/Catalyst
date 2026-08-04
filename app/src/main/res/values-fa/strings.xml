@@ -82,6 +82,8 @@
     <string name="delete_note_title">حذف یادداشت</string>
     <string name="delete_task_message">آیا مطمئن هستید که می‌خواهید این کار را برای همیشه حذف کنید؟</string>
     <string name="delete_task_title">حذف کار</string>
+    <string name="delete_tag_title">حذف برچسب</string>
+    <string name="delete_tag_confirm">آیا مطمئن هستید که می‌خواهید برچسب «%1$s» را حذف کنید؟ وظایف و یادداشت‌های دارای این برچسب، برچسب‌زدایی می‌شوند.</string>
     <string name="task_deleted">کار حذف شد</string>
     <string name="note_deleted">یادداشت حذف شد</string>
     <string name="journal_entries_deleted">%1$d یادداشت روزانه حذف شد</string>

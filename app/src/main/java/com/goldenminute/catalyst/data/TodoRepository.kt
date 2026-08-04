@@ -92,6 +92,10 @@ class TodoRepository(
         todoDao.updateSubTaskCompletion(id, isCompleted)
     }
 
+    suspend fun updateAllSubTasksCompletion(todoId: Int, isCompleted: Boolean) {
+        todoDao.updateAllSubTasksCompletion(todoId, isCompleted)
+    }
+
     // --- Notes features ---
     val allNotes: Flow<List<NoteItem>> = noteDao.getAllNotes()
 

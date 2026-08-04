@@ -76,12 +76,29 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 class MainActivity : ComponentActivity() {
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val viewModel: TodoViewModel by viewModels()
+        handleTimerIntent(intent, viewModel)
+    }
+
+    private fun handleTimerIntent(intent: Intent?, viewModel: TodoViewModel) {
+        if (intent?.action == "ACTION_SAVE_TIMER") {
+            viewModel.saveCurrentTimerSession(this)
+            // Clear the action so it doesn't trigger again on rotation
+            intent.action = null
+        }
+    }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
 
         val viewModel: TodoViewModel by viewModels()
+        
+        handleTimerIntent(intent, viewModel)
 
         splashScreen.setKeepOnScreenCondition {
             !viewModel.isInitialized.value

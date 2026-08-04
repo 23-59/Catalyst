@@ -65,6 +65,9 @@ interface TodoDao {
 
     @Query("UPDATE subtasks SET isCompleted = :isCompleted WHERE id = :id")
     suspend fun updateSubTaskCompletion(id: Int, isCompleted: Boolean)
+
+    @Query("UPDATE subtasks SET isCompleted = :isCompleted WHERE todoId = :todoId")
+    suspend fun updateAllSubTasksCompletion(todoId: Int, isCompleted: Boolean)
 }
 
 @Dao
