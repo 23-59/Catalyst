@@ -101,6 +101,7 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import dev.chrisbanes.haze.blur.blurEffect
 import androidx.core.graphics.toColorInt
+import kotlinx.coroutines.invoke
 
 fun getSystemLocale(): Locale = Locale.getDefault()
 
@@ -5367,6 +5368,8 @@ fun NoteDetailsDialog(
     }
 }
 
+data class AppInfo(val name: String, val packageName: String)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddTaskScreen(
@@ -5403,6 +5406,23 @@ fun AddTaskScreen(
     var showTimePicker by remember { mutableStateOf(false) }
     var associatedPackageName by remember { mutableStateOf(todoToEdit?.associatedPackageName) }
     var trackingMode by remember { mutableStateOf(todoToEdit?.trackingMode ?: "Strict") }
+    var showAppSelector by remember { mutableStateOf(false) }
+    var installedApps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
+    
+    val context = LocalContext.current
+    
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.Dispatchers.IO.invoke {
+            val pm = context.packageManager
+            val intent = android.content.Intent(android.content.Intent.ACTION_MAIN, null).apply {
+                addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+            }
+            val apps = pm.queryIntentActivities(intent, 0).map {
+                AppInfo(it.loadLabel(pm).toString(), it.activityInfo.packageName)
+            }.distinctBy { it.packageName }.sortedBy { it.name.lowercase() }
+            installedApps = apps
+        }
+    }
 
     val isPersian = getSystemLocale().language == "fa"
     val calendar = remember {
@@ -5429,9 +5449,6 @@ fun AddTaskScreen(
             } else ""
         )
     }
-
-    val context = LocalContext.current
-
     var isListening by remember { mutableStateOf(false) }
     var voiceErrorMessage by remember { mutableStateOf<String?>(null) }
     var isSuggestingCategory by remember { mutableStateOf(false) }
@@ -5574,6 +5591,80 @@ fun AddTaskScreen(
                 showJalaliDatePicker = false
             }
         )
+    }
+
+    if (showAppSelector) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showAppSelector = false }) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 500.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = SlateDark,
+                border = BorderStroke(1.dp, BorderColor)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Select Application",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = TextPrimary,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    
+                    if (installedApps.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = NeonCyan, modifier = Modifier.size(32.dp))
+                        }
+                    } else {
+                        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
+                            items(installedApps) { app ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            associatedPackageName = app.packageName
+                                            showAppSelector = false
+                                        }
+                                        .padding(vertical = 12.dp, horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Android,
+                                        contentDescription = null,
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = app.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = TextPrimary
+                                        )
+                                        Text(
+                                            text = app.packageName,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { showAppSelector = false }) {
+                            Text(stringResource(R.string.cancel), color = TextSecondary)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     val currentLocalContext = LocalContext.current
@@ -6189,20 +6280,47 @@ fun AddTaskScreen(
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                         
-                        OutlinedTextField(
-                            value = associatedPackageName ?: "",
-                            onValueChange = { associatedPackageName = it.ifEmpty { null } },
-                            placeholder = { Text("e.g. com.instagram.android", color = TextSecondary) },
-                            modifier = Modifier.fillMaxWidth().height(50.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = NeonCyan,
-                                unfocusedBorderColor = BorderColor,
-                                focusedTextColor = TextPrimary,
-                                unfocusedTextColor = TextPrimary,
-                                cursorColor = NeonCyan
-                            ),
-                            textStyle = MaterialTheme.typography.bodyMedium
-                        )
+                        val displayAppName = installedApps.find { it.packageName == associatedPackageName }?.name ?: associatedPackageName
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .border(1.dp, BorderColor, RoundedCornerShape(8.dp))
+                                .background(SlateDark)
+                                .clickable { showAppSelector = true }
+                                .padding(horizontal = 16.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = displayAppName ?: "Select an App...",
+                                    color = if (displayAppName != null) TextPrimary else TextSecondary,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                if (associatedPackageName != null) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Clear",
+                                        tint = TextSecondary,
+                                        modifier = Modifier
+                                            .size(18.dp)
+                                            .clickable { associatedPackageName = null }
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowDropDown,
+                                        contentDescription = "Select App",
+                                        tint = TextSecondary
+                                    )
+                                }
+                            }
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "Auto-start timer when you open this app.",
