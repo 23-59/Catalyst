@@ -197,4 +197,24 @@ object TimerStateManager {
             else -> focusLength.value
         }
     }
+
+    fun autoStartTask(taskId: Int) {
+        if (!isTimerRunning.value || activeTaskId.value != taskId) {
+            activeTaskId.value = taskId
+            isTimerRunning.value = true
+            isIdleMode.value = false
+            saveState()
+        }
+    }
+
+    fun autoPauseTask(idle: Boolean = false) {
+        if (isTimerRunning.value) {
+            isTimerRunning.value = false
+            if (idle) {
+                isIdleMode.value = true
+                // In a full implementation, we'd also record an idle session here.
+            }
+            saveState()
+        }
+    }
 }

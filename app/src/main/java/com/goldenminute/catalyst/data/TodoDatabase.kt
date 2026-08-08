@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 
 import androidx.room.migration.Migration
 
-@Database(entities = [Category::class, TodoItem::class, SubTask::class, NoteItem::class], version = 12, exportSchema = false)
+@Database(entities = [Category::class, TodoItem::class, SubTask::class, NoteItem::class], version = 13, exportSchema = false)
 abstract class TodoDatabase : RoomDatabase() {
     abstract fun todoDao(): TodoDao
     abstract fun categoryDao(): CategoryDao
@@ -28,7 +28,7 @@ abstract class TodoDatabase : RoomDatabase() {
                     TodoDatabase::class.java,
                     "todo_database"
                 )
-                .addMigrations(MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                .addMigrations(MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                 .fallbackToDestructiveMigration()
                 .addCallback(TodoDatabaseCallback(scope))
                 .build()
@@ -50,6 +50,12 @@ abstract class TodoDatabase : RoomDatabase() {
         val MIGRATION_11_12 = object : Migration(11, 12) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE categories ADD COLUMN type TEXT NOT NULL DEFAULT 'task'")
+            }
+        }
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE todos ADD COLUMN associatedPackageName TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE todos ADD COLUMN trackingMode TEXT NOT NULL DEFAULT 'Strict'")
             }
         }
     }

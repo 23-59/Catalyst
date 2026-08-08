@@ -49,7 +49,9 @@ data class TodoItem(
     val elapsedTime: Long = 0L,
     val pomodoroCycles: Int = 0,
     val recordedTimes: String = "",
-    val isReminderRepeating: Boolean = false
+    val isReminderRepeating: Boolean = false,
+    val associatedPackageName: String? = null,
+    val trackingMode: String = "Strict" // "Strict" or "Creative"
 )
 
 @JsonClass(generateAdapter = true)

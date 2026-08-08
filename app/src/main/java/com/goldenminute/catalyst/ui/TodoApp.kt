@@ -1803,7 +1803,7 @@ fun TodoApp(viewModel: TodoViewModel) {
                     showAddTaskDialog = false
                     todoToEdit = null
                 },
-                onConfirm = { title, desc, dueDate, priority, catId, hasReminder, reminderTime, isDaily, hasTime, isReminderRepeating ->
+                onConfirm = { title, desc, dueDate, priority, catId, hasReminder, reminderTime, isDaily, hasTime, isReminderRepeating, associatedPackageName, trackingMode ->
                     viewModel.insertTodo(
                         TodoItem(
                             id = todoToEdit?.id ?: 0,
@@ -1818,7 +1818,9 @@ fun TodoApp(viewModel: TodoViewModel) {
                             isDaily = isDaily,
                             hasTime = hasTime,
                             position = todoToEdit?.position ?: 0,
-                            isReminderRepeating = isReminderRepeating
+                            isReminderRepeating = isReminderRepeating,
+                            associatedPackageName = associatedPackageName,
+                            trackingMode = trackingMode
                         )
                     )
                     showAddTaskDialog = false
@@ -5382,7 +5384,9 @@ fun AddTaskScreen(
         reminderTime: Long?,
         isDaily: Boolean,
         hasTime: Boolean,
-        isReminderRepeating: Boolean
+        isReminderRepeating: Boolean,
+        associatedPackageName: String?,
+        trackingMode: String
     ) -> Unit
 ) {
     var title by remember { mutableStateOf(todoToEdit?.title ?: "") }
@@ -5397,6 +5401,8 @@ fun AddTaskScreen(
     var isDaily by remember { mutableStateOf(todoToEdit?.isDaily ?: true) }
     var isReminderRepeating by remember { mutableStateOf(todoToEdit?.isReminderRepeating ?: false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var associatedPackageName by remember { mutableStateOf(todoToEdit?.associatedPackageName) }
+    var trackingMode by remember { mutableStateOf(todoToEdit?.trackingMode ?: "Strict") }
 
     val isPersian = getSystemLocale().language == "fa"
     val calendar = remember {
@@ -6159,6 +6165,91 @@ fun AddTaskScreen(
                         }
                     }
 
+                    // Smart Tracking (App Association)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(SlateDark, RoundedCornerShape(12.dp))
+                            .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
+                            .padding(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.AppShortcut,
+                                contentDescription = "",
+                                tint = NeonCyan,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Smart Auto-Tracking (Optional)",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = TextPrimary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        
+                        OutlinedTextField(
+                            value = associatedPackageName ?: "",
+                            onValueChange = { associatedPackageName = it.ifEmpty { null } },
+                            placeholder = { Text("e.g. com.instagram.android", color = TextSecondary) },
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeonCyan,
+                                unfocusedBorderColor = BorderColor,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                cursorColor = NeonCyan
+                            ),
+                            textStyle = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Auto-start timer when you open this app.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+
+                        if (associatedPackageName?.isNotEmpty() == true) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Tracking Mode:",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = TextPrimary
+                                )
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(SlateLight)
+                                        .padding(4.dp)
+                                ) {
+                                    val modes = listOf("Strict", "Creative")
+                                    modes.forEach { mode ->
+                                        val isSelected = trackingMode == mode
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(if (isSelected) NeonCyan else Color.Transparent)
+                                                .clickable { trackingMode = mode }
+                                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(
+                                                text = mode,
+                                                color = if (isSelected) SlateDark else TextSecondary,
+                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Daily task switch row
                     Row(
                         modifier = Modifier
@@ -6294,7 +6385,9 @@ fun AddTaskScreen(
                                         alarmtime,
                                         isDaily,
                                         hasTime,
-                                        isReminderRepeating
+                                        isReminderRepeating,
+                                        associatedPackageName,
+                                        trackingMode
                                     )
                                 }
                             },
