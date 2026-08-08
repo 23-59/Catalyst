@@ -377,4 +377,6 @@
     <string name="free_sessions_count">%1$d session</string>
     <string name="free_sessions_count_plural">%1$d sessions</string>
     <string name="no_date_history">No Date</string>
+    <string name="pull_down_fullscreen">Pull down for full screen</string>
+    <string name="release_for_fullscreen">Release for full screen</string>
 </resources>

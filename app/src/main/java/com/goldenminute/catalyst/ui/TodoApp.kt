@@ -1444,49 +1444,55 @@ fun TodoApp(viewModel: TodoViewModel) {
                                     modifier = Modifier.padding(bottom = 16.dp)
                                 )
                             }
-                            if (!isTasksFullScreen) {
-                                // Stats Carousel / Banner (Visually stunning interactive cards)
-                                StatsBanner(stats, onProgressClick = { currentScreen = "Progress" })
+                            AnimatedVisibility(
+                                visible = !isTasksFullScreen,
+                                enter = expandVertically(animationSpec = tween(400, easing = FastOutSlowInEasing)) + fadeIn(animationSpec = tween(400)),
+                                exit = shrinkVertically(animationSpec = tween(400, easing = FastOutSlowInEasing)) + fadeOut(animationSpec = tween(400))
+                            ) {
+                                Column {
+                                    // Stats Carousel / Banner (Visually stunning interactive cards)
+                                    StatsBanner(stats, onProgressClick = { currentScreen = "Progress" })
 
-                                Spacer(modifier = Modifier.height(18.dp))
-                            }
+                                    Spacer(modifier = Modifier.height(18.dp))
 
-                            // Time filters tab selectors (All, Today, Upcoming, Completed)
-                            TabFilters(
-                                currentTab = currentTab,
-                                onTabSelected = { viewModel.selectedTab.value = it }
-                            )
+                                    // Time filters tab selectors (All, Today, Upcoming, Completed)
+                                    TabFilters(
+                                        currentTab = currentTab,
+                                        onTabSelected = { viewModel.selectedTab.value = it }
+                                    )
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                                    Spacer(modifier = Modifier.height(16.dp))
 
-                            // Custom Category tagging list selector + "Add Category" quick launcher
-                            CategoryRowSelector(
-                                categories = taskCategories,
-                                selectedId = selectedCatId,
-                                onSelectId = { viewModel.selectedCategoryId.value = it },
-                                onAddCategoryClick = { showAddCategoryDialog = "task" },
-                                onDeleteCategory = { viewModel.deleteCategory(it) }
-                            )
+                                    // Custom Category tagging list selector + "Add Category" quick launcher
+                                    CategoryRowSelector(
+                                        categories = taskCategories,
+                                        selectedId = selectedCatId,
+                                        onSelectId = { viewModel.selectedCategoryId.value = it },
+                                        onAddCategoryClick = { showAddCategoryDialog = "task" },
+                                        onDeleteCategory = { viewModel.deleteCategory(it) }
+                                    )
 
-                            Spacer(modifier = Modifier.height(12.dp))
+                                    Spacer(modifier = Modifier.height(12.dp))
 
-                            // Priority filtering strip
-                            PriorityFilterStrip(
-                                selectedPriorityId = selectedPriorityId,
-                                onPrioritySelected = { 
-                                    viewModel.selectedPriorityId.value = it
-                                    if (it == null) {
-                                        coroutineScope.launch { 
-                                            kotlinx.coroutines.delay(100)
-                                            if (listState.layoutInfo.totalItemsCount > 0) {
-                                                listState.animateScrollToItem(0)
+                                    // Priority filtering strip
+                                    PriorityFilterStrip(
+                                        selectedPriorityId = selectedPriorityId,
+                                        onPrioritySelected = { 
+                                            viewModel.selectedPriorityId.value = it
+                                            if (it == null) {
+                                                coroutineScope.launch { 
+                                                    kotlinx.coroutines.delay(100)
+                                                    if (listState.layoutInfo.totalItemsCount > 0) {
+                                                        listState.animateScrollToItem(0)
+                                                    }
+                                                }
                                             }
                                         }
-                                    }
-                                }
-                            )
+                                    )
 
-                            Spacer(modifier = Modifier.height(22.dp))
+                                    Spacer(modifier = Modifier.height(22.dp))
+                                }
+                            }
 
                             // Todo Items display
                             if (todos.isEmpty()) {
@@ -1505,110 +1511,116 @@ fun TodoApp(viewModel: TodoViewModel) {
                                     onCreateTaskClick = { showAddTaskDialog = true }
                                 )
                             } else {
-                                LazyColumn(
-                                    state = listState,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(20.dp),
-                                    contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 160.dp)
+                                SwipeToFullScreenContainer(
+                                    isAlreadyFullScreen = isTasksFullScreen,
+                                    canScrollBackward = listState.canScrollBackward,
+                                    onEnterFullScreen = { isTasksFullScreen = true },
+                                    indicatorTopPadding = 0.dp,
+                                    modifier = Modifier.weight(1f)
                                 ) {
-                                    items(localTodos, key = { it.id }) { item ->
-                                        val itemSubTasks = subTasksGrouped[item.id] ?: emptyList()
-                                        val categoryOfTodo =
-                                            item.categoryId?.let { categoriesMap[it] }
+                                    LazyColumn(
+                                        state = listState,
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(20.dp),
+                                        contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 160.dp)
+                                    ) {
+                                        items(localTodos, key = { it.id }) { item ->
+                                            val itemSubTasks = subTasksGrouped[item.id] ?: emptyList()
+                                            val categoryOfTodo =
+                                                item.categoryId?.let { categoriesMap[it] }
 
-                                        TodoCard(
-                                            todo = item,
-                                            category = categoryOfTodo,
-                                            subTasks = itemSubTasks,
-                                            modifier = Modifier.animateItem(),
-                                            isMultiSelectMode = isMultiSelectMode,
-                                            isSelected = selectedTaskIds.contains(item.id),
-                                            onSelect = {
-                                                if (selectedTaskIds.contains(item.id)) {
-                                                    selectedTaskIds.remove(item.id)
-                                                    if (selectedTaskIds.isEmpty()) {
-                                                        isMultiSelectMode = false
-                                                    }
-                                                } else {
-                                                    selectedTaskIds.add(item.id)
-                                                }
-                                            },
-                                            onLongClick = {
-                                                if (!isMultiSelectMode) {
-                                                    isMultiSelectMode = true
-                                                    selectedTaskIds.add(item.id)
-                                                }
-                                            },
-                                            onToggleComplete = {
-                                                hapticFeedback.performHapticFeedback(
-                                                    HapticFeedbackType.LongPress
-                                                )
-                                                viewModel.toggleTodoCompleted(
-                                                    item.id,
-                                                    !item.isCompleted
-                                                )
-                                            },
-                                            onDelete = { todoToDelete = item },
-                                            onShowDetails = {
-                                                todoToShowDetails = item
-                                            },
-                                            onEdit = {
-                                                todoToEdit = item
-                                                showAddTaskDialog = true
-                                            },
-                                            onToggleSubTask = { sub ->
-                                                hapticFeedback.performHapticFeedback(
-                                                    HapticFeedbackType.LongPress
-                                                )
-                                                viewModel.toggleSubTaskCompleted(
-                                                    sub.id,
-                                                    !sub.isCompleted
-                                                )
-                                            },
-                                            onAddSubTask = { text ->
-                                                viewModel.addSubTask(
-                                                    item.id,
-                                                    text
-                                                )
-                                            },
-                                            onDeleteSubTask = { sub ->
-                                                hapticFeedback.performHapticFeedback(
-                                                    HapticFeedbackType.LongPress
-                                                )
-                                                viewModel.deleteSubTask(sub.id)
-                                            },
-                                            onDeleteSessionRecord = { index ->
-                                                viewModel.deleteSessionRecord(
-                                                    item.id,
-                                                    index
-                                                )
-                                            },
-                                            onSmartSuggest = { onComplete ->
-                                                viewModel.generateSubTasks(
-                                                    title = item.title,
-                                                    description = item.description,
-                                                    onResult = { subTasks ->
-                                                        subTasks.forEach {
-                                                            viewModel.addSubTask(
-                                                                item.id,
-                                                                it
-                                                            )
+                                            TodoCard(
+                                                todo = item,
+                                                category = categoryOfTodo,
+                                                subTasks = itemSubTasks,
+                                                modifier = Modifier.animateItem(),
+                                                isMultiSelectMode = isMultiSelectMode,
+                                                isSelected = selectedTaskIds.contains(item.id),
+                                                onSelect = {
+                                                    if (selectedTaskIds.contains(item.id)) {
+                                                        selectedTaskIds.remove(item.id)
+                                                        if (selectedTaskIds.isEmpty()) {
+                                                            isMultiSelectMode = false
                                                         }
-                                                        onComplete()
-                                                    },
-                                                    onError = { error ->
-                                                        Toast.makeText(
-                                                            context,
-                                                            error,
-                                                            Toast.LENGTH_SHORT
-                                                        ).show()
-                                                        onComplete()
+                                                    } else {
+                                                        selectedTaskIds.add(item.id)
                                                     }
-                                                )
-                                            }
-                                        )
+                                                },
+                                                onLongClick = {
+                                                    if (!isMultiSelectMode) {
+                                                        isMultiSelectMode = true
+                                                        selectedTaskIds.add(item.id)
+                                                    }
+                                                },
+                                                onToggleComplete = {
+                                                    hapticFeedback.performHapticFeedback(
+                                                        HapticFeedbackType.LongPress
+                                                    )
+                                                    viewModel.toggleTodoCompleted(
+                                                        item.id,
+                                                        !item.isCompleted
+                                                    )
+                                                },
+                                                onDelete = { todoToDelete = item },
+                                                onShowDetails = {
+                                                    todoToShowDetails = item
+                                                },
+                                                onEdit = {
+                                                    todoToEdit = item
+                                                    showAddTaskDialog = true
+                                                },
+                                                onToggleSubTask = { sub ->
+                                                    hapticFeedback.performHapticFeedback(
+                                                        HapticFeedbackType.LongPress
+                                                    )
+                                                    viewModel.toggleSubTaskCompleted(
+                                                        sub.id,
+                                                        !sub.isCompleted
+                                                    )
+                                                },
+                                                onAddSubTask = { text ->
+                                                    viewModel.addSubTask(
+                                                        item.id,
+                                                        text
+                                                    )
+                                                },
+                                                onDeleteSubTask = { sub ->
+                                                    hapticFeedback.performHapticFeedback(
+                                                        HapticFeedbackType.LongPress
+                                                    )
+                                                    viewModel.deleteSubTask(sub.id)
+                                                },
+                                                onDeleteSessionRecord = { index ->
+                                                    viewModel.deleteSessionRecord(
+                                                        item.id,
+                                                        index
+                                                    )
+                                                },
+                                                onSmartSuggest = { onComplete ->
+                                                    viewModel.generateSubTasks(
+                                                        title = item.title,
+                                                        description = item.description,
+                                                        onResult = { subTasks ->
+                                                            subTasks.forEach {
+                                                                viewModel.addSubTask(
+                                                                    item.id,
+                                                                    it
+                                                                )
+                                                            }
+                                                            onComplete()
+                                                        },
+                                                        onError = { error ->
+                                                            Toast.makeText(
+                                                                context,
+                                                                error,
+                                                                Toast.LENGTH_SHORT
+                                                            ).show()
+                                                            onComplete()
+                                                        }
+                                                    )
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1685,6 +1697,7 @@ fun TodoApp(viewModel: TodoViewModel) {
                                     viewModel = viewModel,
                                     listState = notesListState,
                                     isFullScreen = isNotesFullScreen,
+                                    onEnterFullScreen = { isNotesFullScreen = true },
                                     bottomPadding = innerPadding.calculateBottomPadding() + 160.dp,
                                     isInMultiSelectMode = isNotesMultiSelectMode,
                                     selectedNoteIds = selectedNoteIds,
@@ -1722,6 +1735,9 @@ fun TodoApp(viewModel: TodoViewModel) {
                                     onAddNoteClick = {
                                         noteToEdit = null
                                         showAddNoteDialog = true
+                                    },
+                                    onAddCategoryClick = {
+                                        showAddCategoryDialog = "note"
                                     }
                                 )
                             }
@@ -2914,7 +2930,20 @@ fun TodoCard(
     val totalCount = subTasks.size
 
     val dbRecords = remember(todo.recordedTimes) {
-        RecordedTimeItem.parseList(todo.recordedTimes)
+        val now = java.util.Calendar.getInstance()
+        now.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        now.set(java.util.Calendar.MINUTE, 0)
+        now.set(java.util.Calendar.SECOND, 0)
+        now.set(java.util.Calendar.MILLISECOND, 0)
+        val startOfToday = now.timeInMillis
+        RecordedTimeItem.parseList(todo.recordedTimes).filter { it.timestamp >= startOfToday }
+    }
+
+    val todayPomodoroCycles = remember(dbRecords) {
+        dbRecords.filter { it.isPomodoro }.sumOf { it.value.toInt() }
+    }
+    val todayElapsedTime = remember(dbRecords) {
+        dbRecords.filter { !it.isPomodoro }.sumOf { it.value }
     }
 
     val interactionSource =
@@ -3457,7 +3486,7 @@ fun TodoCard(
                                         }
 
                                         // Redesigned Focus Stats (Assigned Times)
-                                        if (todo.pomodoroCycles > 0 || todo.elapsedTime > 0) {
+                                        if (todayPomodoroCycles > 0 || todayElapsedTime > 0L) {
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
@@ -3465,7 +3494,7 @@ fun TodoCard(
                                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                if (todo.pomodoroCycles > 0) {
+                                                if (todayPomodoroCycles > 0) {
                                                     Row(
                                                         verticalAlignment = Alignment.CenterVertically,
                                                         horizontalArrangement = Arrangement.spacedBy(
@@ -3491,15 +3520,15 @@ fun TodoCard(
                                                             modifier = Modifier.size(14.dp)
                                                         )
                                                         Text(
-                                                            text = "${todo.pomodoroCycles} cycle${if (todo.pomodoroCycles > 1) "s" else ""}",
+                                                            text = "${todayPomodoroCycles} cycle${if (todayPomodoroCycles > 1) "s" else ""}",
                                                             color = TextPrimary,
                                                             style = MaterialTheme.typography.labelSmall,
                                                             fontWeight = FontWeight.Bold
                                                         )
                                                     }
                                                 }
-                                                if (todo.elapsedTime > 0) {
-                                                    val totalMs = todo.elapsedTime
+                                                if (todayElapsedTime > 0L) {
+                                                    val totalMs = todayElapsedTime
                                                     val hrs = totalMs / 3600000
                                                     val mins = (totalMs % 3600000) / 60000
                                                     val secs = (totalMs % 60000) / 1000
@@ -5508,7 +5537,7 @@ fun AddTaskScreen(
                 }
             },
             dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { showTimePicker = false }) {
+                TextButton(onClick = { showTimePicker = false }) {
                     Text(stringResource(R.string.cancel))
                 }
             },
@@ -5519,11 +5548,11 @@ fun AddTaskScreen(
                 )
             },
             text = {
-                androidx.compose.foundation.layout.Box(
+                Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    androidx.compose.material3.TimePicker(state = timePickerState)
+                    TimePicker(state = timePickerState)
                 }
             }
         )

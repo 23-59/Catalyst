@@ -61,32 +61,52 @@ fun NotesScreen(
     onStartMultiSelect: (NoteItem) -> Unit = {},
     onNoteClick: (NoteItem) -> Unit,
     onDeleteNote: (NoteItem) -> Unit,
-    onAddNoteClick: () -> Unit = {}
+    onAddNoteClick: () -> Unit = {},
+    onEnterFullScreen: () -> Unit = {},
+    onAddCategoryClick: () -> Unit = {}
 ) {
     val notes by viewModel.allNotes.collectAsState()
     val categories by viewModel.categories.collectAsState()
+    val noteCategories by viewModel.noteCategories.collectAsState()
+    val selectedNoteCatId by viewModel.selectedNoteCategoryId.collectAsState()
     val categoriesMap = remember(categories) { categories.associateBy { it.id } }
 
     val isGridView by viewModel.isNotesGridView.collectAsState()
     var selectedFilter by remember { mutableStateOf("All") } // "All", "Recent", "Short", "Long"
 
+    // 0. Extract user-defined tags from all notes
+    val extractedTags = remember(notes) {
+        val hashtagRegex = Regex("#[\\w\\u0600-\\u06FF]+")
+        val tags = mutableSetOf<String>()
+        notes.forEach { note ->
+            tags.addAll(hashtagRegex.findAll(note.title).map { it.value })
+            tags.addAll(hashtagRegex.findAll(note.content).map { it.value })
+        }
+        tags.toList().sorted()
+    }
+
     // 1. Tag Filtering Logic
-    val filteredNotes = remember(notes, selectedFilter) {
+    val filteredNotes = remember(notes, selectedFilter, selectedNoteCatId) {
         notes.filter { note ->
-            val matchesFilter = when (selectedFilter) {
-                "Recent" -> note.createdAt >= System.currentTimeMillis() - 24 * 60 * 60 * 1000L
-                "Short" -> {
+            val matchesCategory = selectedNoteCatId == null || note.categoryId == selectedNoteCatId
+            val matchesFilter = when {
+                selectedFilter == "Recent" -> note.createdAt >= System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+                selectedFilter == "Short" -> {
                     val wordCount = if (note.content.isBlank()) 0 else note.content.split("\\s+".toRegex()).filter { it.isNotBlank() }.size
                     wordCount <= 30
                 }
-                "Long" -> {
+                selectedFilter == "Long" -> {
                     val wordCount = if (note.content.isBlank()) 0 else note.content.split("\\s+".toRegex()).filter { it.isNotBlank() }.size
                     wordCount > 30
+                }
+                selectedFilter.startsWith("#") -> {
+                    note.title.contains(selectedFilter, ignoreCase = true) || 
+                    note.content.contains(selectedFilter, ignoreCase = true)
                 }
                 else -> true
             }
 
-            matchesFilter
+            matchesCategory && matchesFilter
         }
     }
 
@@ -95,14 +115,20 @@ fun NotesScreen(
             .fillMaxSize()
     ) {
         // Redesigned Header Row: Beautiful dynamic title and count badge + Segmented Grid/List toggle + Multi-Select Actions
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        AnimatedVisibility(
+            visible = !isFullScreen,
+            enter = expandVertically(animationSpec = tween(400, easing = FastOutSlowInEasing)) + fadeIn(animationSpec = tween(400)),
+            exit = shrinkVertically(animationSpec = tween(400, easing = FastOutSlowInEasing)) + fadeOut(animationSpec = tween(400))
         ) {
-            Row(
+            Column {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.weight(1f).padding(end = 12.dp)
@@ -236,12 +262,16 @@ fun NotesScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            val filters = listOf(
+            val filters = mutableListOf(
                 "All" to stringResource(R.string.filter_all),
                 "Recent" to stringResource(R.string.filter_recent),
                 "Short" to stringResource(R.string.filter_short),
                 "Long" to stringResource(R.string.filter_long)
             )
+            
+            extractedTags.forEach { tag ->
+                filters.add(tag to tag)
+            }
 
             filters.forEach { (filterType, label) ->
                 val isSelected = selectedFilter == filterType
@@ -259,10 +289,11 @@ fun NotesScreen(
                     Brush.horizontalGradient(listOf(SlateDark.copy(alpha = 0.4f), SlateDark.copy(alpha = 0.4f)))
                 }
 
-                val icon = when (filterType) {
-                    "Recent" -> Icons.Default.AccessTime
-                    "Short" -> Icons.AutoMirrored.Filled.ShortText
-                    "Long" -> Icons.AutoMirrored.Filled.Subject
+                val icon = when {
+                    filterType == "Recent" -> Icons.Default.AccessTime
+                    filterType == "Short" -> Icons.AutoMirrored.Filled.ShortText
+                    filterType == "Long" -> Icons.AutoMirrored.Filled.Subject
+                    filterType.startsWith("#") -> Icons.Default.Tag
                     else -> Icons.Default.Book
                 }
 
@@ -307,6 +338,18 @@ fun NotesScreen(
                 }
             }
         }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        CategoryRowSelector(
+            categories = noteCategories,
+            selectedId = selectedNoteCatId,
+            onSelectId = { viewModel.selectedNoteCategoryId.value = it },
+            onAddCategoryClick = onAddCategoryClick,
+            onDeleteCategory = { viewModel.deleteCategory(it) }
+        )
+            }
+        }
 
         // Notes List / Empty State area
         Box(
@@ -324,26 +367,34 @@ fun NotesScreen(
                     EmptyNotesStateView(onAddClick = onAddNoteClick)
                 }
             } else {
-                LazyVerticalStaggeredGrid(
-                    columns = StaggeredGridCells.Fixed(if (isGridView) 2 else 1),
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(top = 8.dp, bottom = bottomPadding),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalItemSpacing = 12.dp
+                SwipeToFullScreenContainer(
+                    isAlreadyFullScreen = isFullScreen,
+                    canScrollBackward = listState.canScrollBackward,
+                    onEnterFullScreen = onEnterFullScreen,
+                    indicatorTopPadding = 0.dp,
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    items(filteredNotes, key = { it.id }) { note ->
-                        NoteCard(
-                            note = note,
-                            category = categoriesMap[note.categoryId],
-                            isGridView = isGridView,
-                            isSelected = selectedNoteIds.contains(note.id),
-                            isInMultiSelectMode = isInMultiSelectMode,
-                            modifier = Modifier.animateItem(),
-                            onClick = { onNoteClick(note) },
-                            onLongClick = { onStartMultiSelect(note) },
-                            onDelete = { onDeleteNote(note) }
-                        )
+                    LazyVerticalStaggeredGrid(
+                        columns = StaggeredGridCells.Fixed(if (isGridView) 2 else 1),
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(top = 8.dp, bottom = bottomPadding),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalItemSpacing = 12.dp
+                    ) {
+                        items(filteredNotes, key = { it.id }) { note ->
+                            NoteCard(
+                                note = note,
+                                category = categoriesMap[note.categoryId],
+                                isGridView = isGridView,
+                                isSelected = selectedNoteIds.contains(note.id),
+                                isInMultiSelectMode = isInMultiSelectMode,
+                                modifier = Modifier.animateItem(),
+                                onClick = { onNoteClick(note) },
+                                onLongClick = { onStartMultiSelect(note) },
+                                onDelete = { onDeleteNote(note) }
+                            )
+                        }
                     }
                 }
             }
@@ -559,41 +610,6 @@ fun NoteCard(
                                 )
                             }
                             
-                            if (category != null) {
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .widthIn(max = 80.dp)
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(android.graphics.Color.parseColor(category.colorHex).let { Color(it) }.copy(alpha = 0.15f))
-                                        .padding(horizontal = 4.dp, vertical = 2.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = getCategoryIcon(category.iconName),
-                                        contentDescription = null,
-                                        tint = android.graphics.Color.parseColor(category.colorHex).let { Color(it) },
-                                        modifier = Modifier.size(10.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(2.dp))
-                                    val catDisplayName = when (category.name) {
-                                        "Work" -> stringResource(R.string.category_work)
-                                        "Personal" -> stringResource(R.string.category_personal)
-                                        "Shopping" -> stringResource(R.string.category_shopping)
-                                        "Health" -> stringResource(R.string.category_health)
-                                        "Study" -> stringResource(R.string.category_study)
-                                        "Finance" -> stringResource(R.string.category_finance)
-                                        else -> category.name
-                                    }
-                                    Text(
-                                        text = catDisplayName,
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 9.sp, fontWeight = FontWeight.SemiBold),
-                                        color = android.graphics.Color.parseColor(category.colorHex).let { Color(it) },
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
                         }
                     }
 
@@ -662,33 +678,78 @@ fun NoteCard(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Smart statistics footer chip (Word count and read duration)
+                // Footer: Smart statistics and Category Tag
                 Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(palette.primaryColor.copy(alpha = 0.08f))
-                        .border(BorderStroke(0.5.dp, palette.primaryColor.copy(alpha = 0.2f)), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Schedule,
-                        contentDescription = null,
-                        tint = palette.secondaryColor,
-                        modifier = Modifier.size(11.dp)
-                    )
-                    val isPersian = Locale.getDefault().language == "fa"
-                    val wcStr = if (isPersian) JalaliCalendarHelper.toPersianDigits(wordCount.toString()) else wordCount.toString()
-                    val rtStr = if (isPersian) JalaliCalendarHelper.toPersianDigits(readTime.toString()) else readTime.toString()
-                    Text(
-                        text = "$wcStr ${stringResource(R.string.word_count_suffix)} • $rtStr ${stringResource(R.string.read_time_suffix)}",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = palette.secondaryColor
+                    // Smart statistics footer chip (Word count and read duration)
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(palette.primaryColor.copy(alpha = 0.08f))
+                            .border(BorderStroke(0.5.dp, palette.primaryColor.copy(alpha = 0.2f)), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = palette.secondaryColor,
+                            modifier = Modifier.size(11.dp)
                         )
-                    )
+                        val isPersian = Locale.getDefault().language == "fa"
+                        val wcStr = if (isPersian) JalaliCalendarHelper.toPersianDigits(wordCount.toString()) else wordCount.toString()
+                        val rtStr = if (isPersian) JalaliCalendarHelper.toPersianDigits(readTime.toString()) else readTime.toString()
+                        Text(
+                            text = "$wcStr ${stringResource(R.string.word_count_suffix)} • $rtStr ${stringResource(R.string.read_time_suffix)}",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = palette.secondaryColor
+                            )
+                        )
+                    }
+
+                    if (category != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .widthIn(max = 110.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(android.graphics.Color.parseColor(category.colorHex).let { Color(it) }.copy(alpha = 0.25f))
+                                .padding(horizontal = 6.dp, vertical = 3.dp)
+                        ) {
+                            Icon(
+                                imageVector = getCategoryIcon(category.iconName),
+                                contentDescription = null,
+                                tint = android.graphics.Color.parseColor(category.colorHex).let { Color(it) },
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            val catDisplayName = when (category.name) {
+                                "Work" -> stringResource(R.string.category_work)
+                                "Personal" -> stringResource(R.string.category_personal)
+                                "Shopping" -> stringResource(R.string.category_shopping)
+                                "Health" -> stringResource(R.string.category_health)
+                                "Study" -> stringResource(R.string.category_study)
+                                "Finance" -> stringResource(R.string.category_finance)
+                                else -> category.name
+                            }
+                            Text(
+                                text = catDisplayName,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontSize = 11.sp, 
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = android.graphics.Color.parseColor(category.colorHex).let { Color(it) },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
             }
         }

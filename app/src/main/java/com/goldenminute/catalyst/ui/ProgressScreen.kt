@@ -245,10 +245,15 @@ fun InsightsContent(viewModel: TodoViewModel, todos: List<TodoItem>, categories:
 
     val periodStats = remember(todos, startMs, endMs) {
 
-        val filteredTodos = todos.filter {
-            (it.completedDate != null && it.completedDate in startMs..endMs) ||
-            (it.dueDate != null && it.dueDate in startMs..endMs) ||
-            (!it.isCompleted && it.priority == 2)
+        // Include tasks that had any recorded focus activity in the period,
+        // OR were completed/due in the period, OR are active high-priority
+        val filteredTodos = todos.filter { todo ->
+            val hasCompletedInRange = todo.completedDate != null && todo.completedDate in startMs..endMs
+            val hasDueInRange = todo.dueDate != null && todo.dueDate in startMs..endMs
+            val hasRecordedActivityInRange = RecordedTimeItem.parseList(todo.recordedTimes)
+                .any { it.timestamp in startMs..endMs }
+            val isActiveHighPriority = !todo.isCompleted && todo.priority == 2
+            hasCompletedInRange || hasDueInRange || hasRecordedActivityInRange || isActiveHighPriority
         }
 
         val totalTasks = filteredTodos.size
@@ -686,7 +691,7 @@ fun InsightsContent(viewModel: TodoViewModel, todos: List<TodoItem>, categories:
         DailyFocusGoalCard(viewModel = viewModel, todos = todos, selectedPeriod = selectedPeriod, freeSessionRecords = freeSessionRecords)
 
         // Free Focus Sessions Card
-        FreeFocusSessionsCard(freeSessionRecords = freeSessionRecords)
+        FreeFocusSessionsCard(freeSessionRecords = freeSessionRecords.filter { it.timestamp in startMs..endMs })
 
         // Category Distribution Progress Widgets
         CategoryDistributionSection(todos, categories, startMs, endMs)

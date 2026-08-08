@@ -487,6 +487,7 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     
     // Filtering states
     val selectedCategoryId = MutableStateFlow<Int?>(null)
+    val selectedNoteCategoryId = MutableStateFlow<Int?>(null)
     val selectedPriorityId = MutableStateFlow<Int?>(null) // 0=Low, 1=Medium, 2=High
     val searchQuery = MutableStateFlow("")
     val selectedTab = MutableStateFlow("All") // "All", "Today", "Upcoming", "Completed"
@@ -800,6 +801,12 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteCategory(category: Category) {
         viewModelScope.launch {
             repository.deleteCategory(category)
+            if (selectedCategoryId.value == category.id) {
+                selectedCategoryId.value = null
+            }
+            if (selectedNoteCategoryId.value == category.id) {
+                selectedNoteCategoryId.value = null
+            }
             TasksWidget().updateAll(getApplication())
         }
     }

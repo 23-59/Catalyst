@@ -349,4 +349,6 @@
     <string name="free_sessions_count_plural">%1$d جلسه</string>
     <string name="no_date_history">بدون تاریخ</string>
     <string name="word_count_suffix">کلمه</string>
+    <string name="pull_down_fullscreen">برای تمام صفحه به پایین بکشید</string>
+    <string name="release_for_fullscreen">برای تمام صفحه رها کنید</string>
 </resources>

@@ -290,7 +290,23 @@ fun FocusScreen(
         } else {
             emptyList()
         }
-        val activeDbRecords = dbRecords.filter { it.isPomodoro == isPomodoro }
+        val now = java.util.Calendar.getInstance()
+        val startOfToday = now.apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val endOfToday = now.apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 23)
+            set(java.util.Calendar.MINUTE, 59)
+            set(java.util.Calendar.SECOND, 59)
+            set(java.util.Calendar.MILLISECOND, 999)
+        }.timeInMillis
+
+        val activeDbRecords = dbRecords.filter { record -> 
+            record.isPomodoro == isPomodoro && record.timestamp in startOfToday..endOfToday 
+        }
         
         if (selectedTodo != null || isIdleMode) {
             Spacer(modifier = Modifier.height(16.dp))
