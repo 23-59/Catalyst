@@ -28,10 +28,11 @@ import kotlinx.coroutines.withContext
 import androidx.compose.runtime.mutableStateOf
 
 class TodoViewModel(application: Application) : AndroidViewModel(application) {
+
     var currentScreenState = mutableStateOf("Tasks")
     var previousScreenState = mutableStateOf("Tasks")
     private val database = TodoDatabase.getDatabase(application, viewModelScope)
-    private val repository = TodoRepository(database.todoDao(), database.categoryDao(), database.noteDao())
+    private val repository = TodoRepository(database.todoDao(), database.categoryDao(), database.noteDao(), database.doomscrollVideoDao())
     val selectedFocusTodo: StateFlow<TodoItem?> = combine(
         com.goldenminute.catalyst.ui.TimerStateManager.activeTaskId,
         repository.allTodos
@@ -79,6 +80,10 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                 
                 dailyFocusGoalHours.value = prefs[DataStoreKeys.DAILY_FOCUS_GOAL_HOURS] ?: 2.0f
                 freeModeSessions.value = prefs[DataStoreKeys.FREE_MODE_SESSIONS] ?: ""
+
+                val apps = prefs[DataStoreKeys.DISTRACTING_APPS]
+                distractingApps.value = apps ?: com.goldenminute.catalyst.service.SmartTrackerService.DEFAULT_DISTRACTING_PACKAGES
+                doomscrollingAlertEnabled.value = prefs[DataStoreKeys.DOOMSCROLLING_ALERT_ENABLED] ?: false
 
                 TimerStateManager.initialize(getApplication())
                 TimerStateManager.focusLength.value = prefs[DataStoreKeys.FOCUS_LENGTH] ?: (25 * 60 * 1000L)
@@ -136,6 +141,41 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     
     val dailyFocusGoalHours = MutableStateFlow(2.0f)
     val freeModeSessions = MutableStateFlow("")
+
+    val distractingApps = MutableStateFlow<Set<String>>(com.goldenminute.catalyst.service.SmartTrackerService.DEFAULT_DISTRACTING_PACKAGES)
+    val doomscrollingAlertEnabled = MutableStateFlow(false)
+
+    fun setDistractingApps(apps: Set<String>) {
+        viewModelScope.launch { getApplication<Application>().appDataStore.edit { it[DataStoreKeys.DISTRACTING_APPS] = apps } }
+        distractingApps.value = apps
+    }
+
+    fun setDoomscrollingAlertEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            getApplication<Application>().appDataStore.edit {
+                it[DataStoreKeys.DOOMSCROLLING_ALERT_ENABLED] = enabled
+            }
+        }
+        doomscrollingAlertEnabled.value = enabled
+    }
+
+    val doomscrollRecords: StateFlow<List<com.goldenminute.catalyst.data.DoomscrollVideoRecord>> =
+        repository.allDoomscrollRecords
+            .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    val totalDoomscrollVideosCount: StateFlow<Int> =
+        doomscrollRecords.map { it.size }
+            .stateIn(viewModelScope, SharingStarted.Lazily, 0)
+
+    val totalDoomscrollDurationMs: StateFlow<Long> =
+        doomscrollRecords.map { list -> list.sumOf { it.durationMs } }
+            .stateIn(viewModelScope, SharingStarted.Lazily, 0L)
+
+    fun clearDoomscrollRecords() {
+        viewModelScope.launch {
+            repository.clearAllDoomscrollRecords()
+        }
+    }
 
     fun setAiHubPrompt(prompt: String) {
         val p = prompt.ifBlank { defaultAiHubPrompt }

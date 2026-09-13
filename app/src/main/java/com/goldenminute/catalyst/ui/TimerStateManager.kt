@@ -1,9 +1,16 @@
 package com.goldenminute.catalyst.ui
 
+import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
+import android.util.Log
 import androidx.datastore.preferences.core.edit
 import com.goldenminute.catalyst.data.DataStoreKeys
+import com.goldenminute.catalyst.data.RecordedTimeItem
+import com.goldenminute.catalyst.data.TodoDatabase
+import com.goldenminute.catalyst.data.TodoRepository
 import com.goldenminute.catalyst.data.timerDataStore
+import com.goldenminute.catalyst.service.SmartTrackerService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -13,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 object TimerStateManager {
+    private const val TAG = "TimerStateManager"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var appContext: Context? = null
     private var isInitialized = false
@@ -29,6 +37,8 @@ object TimerStateManager {
     val pomodoroCycle = MutableStateFlow(0) // Cycles completed (0 to 3)
     val activeTaskId = MutableStateFlow(-1)
     val isIdleMode = MutableStateFlow(false)
+    
+    var mindfulnessCooldownUntil = 0L // Timestamp until which Mindfulness Checks are ignored
 
     private var targetEndTime = 0L
     private var startTime = 0L
@@ -37,6 +47,9 @@ object TimerStateManager {
         if (isInitialized) return
         isInitialized = true
         appContext = context.applicationContext
+
+        // Dismiss any lingering timer notification
+        dismissTimerNotification()
 
         scope.launch {
             val prefs = appContext!!.timerDataStore.data.first()
@@ -49,13 +62,12 @@ object TimerStateManager {
             isIdleMode.value = prefs[DataStoreKeys.IS_IDLE_MODE] ?: false
             
             val running = prefs[DataStoreKeys.IS_TIMER_RUNNING] ?: false
-            val isServiceActive = com.goldenminute.catalyst.service.TimerService.isServiceRunning
             val savedTimeLeft = prefs[DataStoreKeys.TIME_LEFT] ?: (25 * 60 * 1000L)
             val savedTimeElapsed = prefs[DataStoreKeys.TIME_ELAPSED] ?: 0L
             targetEndTime = prefs[DataStoreKeys.TARGET_END_TIME] ?: 0L
             startTime = prefs[DataStoreKeys.START_TIME] ?: 0L
 
-            if (running && isServiceActive) {
+            if (running) {
                 val now = System.currentTimeMillis()
                 if (isPomodoro.value) {
                     val remaining = targetEndTime - now
@@ -83,8 +95,8 @@ object TimerStateManager {
                     isTimerRunning.value = true
                 }
             } else {
-                timeLeft.value = getLengthForMode(pomodoroMode.value)
-                timeElapsed.value = 0L
+                timeLeft.value = savedTimeLeft
+                timeElapsed.value = savedTimeElapsed
                 isTimerRunning.value = false
             }
 
@@ -99,6 +111,7 @@ object TimerStateManager {
                             startTime = now - timeElapsed.value
                         }
                     }
+                    dismissTimerNotification()
                     saveState()
                 }
             }
@@ -107,9 +120,9 @@ object TimerStateManager {
             launch { activeTaskId.collect { saveState() } }
             launch { isIdleMode.collect { saveState() } }
 
-            // Precise update loop that handles sleep / doze mode seamlessly
+            // Precise update loop that handles sleep / doze mode seamlessly and silently counts in the background
             while (true) {
-                delay(200L) // State update rate (~5fps, sufficient for notification mm:ss)
+                delay(200L) // State update rate (~5fps)
                 val currentTime = System.currentTimeMillis()
 
                 if (isTimerRunning.value) {
@@ -137,6 +150,16 @@ object TimerStateManager {
                     }
                 }
             }
+        }
+    }
+
+    private fun dismissTimerNotification() {
+        appContext?.let { ctx ->
+            try {
+                val notificationManager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                notificationManager?.cancel(1001)
+                ctx.stopService(Intent(ctx, com.goldenminute.catalyst.service.TimerService::class.java))
+            } catch (_: Exception) {}
         }
     }
 
@@ -199,12 +222,26 @@ object TimerStateManager {
     }
 
     fun autoStartTask(taskId: Int) {
-        if (!isTimerRunning.value || activeTaskId.value != taskId) {
-            activeTaskId.value = taskId
-            isTimerRunning.value = true
-            isIdleMode.value = false
-            saveState()
+        val currentTaskId = activeTaskId.value
+        
+        // If switching from one assigned task to another, auto-save the previous one first
+        if (currentTaskId != -1 && currentTaskId != taskId) {
+            autoPauseAndSaveTask(currentTaskId)
         }
+
+        // ★ Fix: If timer is already running for THIS task, don't restart
+        if (currentTaskId == taskId && isTimerRunning.value) {
+            return
+        }
+
+        activeTaskId.value = taskId
+        isIdleMode.value = false
+        if (!isTimerRunning.value) {
+            startTime = System.currentTimeMillis()
+            timeElapsed.value = 0L
+            isTimerRunning.value = true
+        }
+        saveState()
     }
 
     fun autoPauseTask(idle: Boolean = false) {
@@ -212,9 +249,112 @@ object TimerStateManager {
             isTimerRunning.value = false
             if (idle) {
                 isIdleMode.value = true
-                // In a full implementation, we'd also record an idle session here.
             }
             saveState()
         }
+    }
+
+    /**
+     * Auto-records and saves the session for the given task when the user leaves the assigned app.
+     * Merges with the most recent record if it's within 2 minutes to prevent hundreds of micro-records.
+     */
+    fun autoPauseAndSaveTask(taskId: Int) {
+        val isPom = isPomodoro.value
+        val currentElapsed = timeElapsed.value
+        val currentLeft = timeLeft.value
+        val focusLen = focusLength.value
+
+        isTimerRunning.value = false
+
+        appContext?.let { ctx ->
+            scope.launch {
+                try {
+                    SmartTrackerService.commitCurrentSectionTime()
+                    val rawSectionsMap = SmartTrackerService.sessionAppSections.toMap()
+                    // Remove "Unknown" and transient "General" sections if other specific sections exist
+                    val hasSpecific = rawSectionsMap.keys.any { it != "Unknown" && it != "General" }
+                    val sectionsMap = if (hasSpecific) {
+                        rawSectionsMap.filterKeys { it != "Unknown" && it != "General" }
+                    } else if (rawSectionsMap.keys.any { it != "Unknown" }) {
+                        rawSectionsMap.filterKeys { it != "Unknown" }
+                    } else {
+                        rawSectionsMap
+                    }
+                    SmartTrackerService.resetSectionTracking()
+
+                    val db = TodoDatabase.getDatabase(ctx, scope)
+                    val repository = TodoRepository(db.todoDao(), db.categoryDao(), db.noteDao())
+                    val todo = repository.getTodoById(taskId)
+
+                    if (todo != null) {
+                        val sectionTotal = sectionsMap.values.sum()
+                        val timeSpent = if (isPom) {
+                            maxOf((focusLen - currentLeft).coerceAtLeast(0L), sectionTotal)
+                        } else {
+                            val computed = if (startTime > 0L) (System.currentTimeMillis() - startTime).coerceAtLeast(0L) else 0L
+                            maxOf(currentElapsed, computed, sectionTotal)
+                        }
+
+                        // ★ Minimum session threshold: skip sub-5-second noise
+                        if (timeSpent < 5000L) {
+                            Log.d(TAG, "Auto-save skipped for task $taskId: session too short (${timeSpent}ms)")
+                            return@launch
+                        }
+
+                        val existingList = RecordedTimeItem.parseList(todo.recordedTimes).toMutableList()
+                        val now = System.currentTimeMillis()
+
+                        // ★ Unify all non-pomodoro sessions under their assigned sections
+                        val nonPomRecords = existingList.filter { !it.isPomodoro }
+                        val pomRecords = existingList.filter { it.isPomodoro }
+
+                        val unifiedSections = mutableMapOf<String, Long>()
+                        for (rec in nonPomRecords) {
+                            for ((sec, time) in rec.appSections) {
+                                unifiedSections[sec] = (unifiedSections[sec] ?: 0L) + time
+                            }
+                        }
+                        for ((sec, time) in sectionsMap) {
+                            unifiedSections[sec] = (unifiedSections[sec] ?: 0L) + time
+                        }
+
+                        // Filter out "Unknown" and transient "General" if specific sections exist
+                        val cleanSections = if (unifiedSections.keys.any { it != "Unknown" && it != "General" }) {
+                            unifiedSections.filterNot { (it.key == "Unknown" || it.key == "General") && it.value < 10_000L }
+                        } else {
+                            unifiedSections.filterNot { it.key == "Unknown" && it.value < 10_000L }
+                        }
+
+                        val prevNonPomTime = nonPomRecords.sumOf { it.value }
+                        val finalNonPomTime = maxOf(prevNonPomTime + timeSpent, cleanSections.values.sum())
+
+                        val unifiedRecord = RecordedTimeItem(
+                            isPomodoro = false,
+                            value = finalNonPomTime,
+                            timestamp = now,
+                            appSections = cleanSections
+                        )
+
+                        val updatedList = (pomRecords + unifiedRecord).toMutableList()
+
+                        val updatedTodo = todo.copy(
+                            elapsedTime = todo.elapsedTime + timeSpent,
+                            pomodoroCycles = todo.pomodoroCycles,
+                            recordedTimes = RecordedTimeItem.serializeList(updatedList)
+                        )
+                        db.todoDao().updateTodo(updatedTodo)
+                        Log.d(TAG, "Auto-saved & unified sessions for task $taskId: +${timeSpent}ms (total: ${finalNonPomTime}ms, sections: $cleanSections)")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to auto-save session for task $taskId", e)
+                }
+            }
+        }
+
+        timeElapsed.value = 0L
+        if (isPom) {
+            timeLeft.value = focusLength.value
+        }
+        saveState()
     }
 }

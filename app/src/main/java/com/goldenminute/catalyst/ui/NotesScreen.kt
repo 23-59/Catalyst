@@ -678,12 +678,54 @@ fun NoteCard(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Footer: Smart statistics and Category Tag
-                Row(
+                // Footer: Tag Pill & Smart Statistics (FlowRow ensures full tag name is never truncated)
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    if (category != null) {
+                        val catColor = remember(category.colorHex) {
+                            safeParseColor(category.colorHex)
+                        }
+                        val catDisplayName = when (category.name) {
+                            "Work" -> stringResource(R.string.category_work)
+                            "Personal" -> stringResource(R.string.category_personal)
+                            "Shopping" -> stringResource(R.string.category_shopping)
+                            "Health" -> stringResource(R.string.category_health)
+                            "Study" -> stringResource(R.string.category_study)
+                            "Finance" -> stringResource(R.string.category_finance)
+                            else -> category.name
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(catColor.copy(alpha = 0.16f))
+                                .border(BorderStroke(0.6.dp, catColor.copy(alpha = 0.35f)), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = getCategoryIcon(category.iconName),
+                                contentDescription = null,
+                                tint = catColor,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = catDisplayName,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = catColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
                     // Smart statistics footer chip (Word count and read duration)
                     Row(
                         modifier = Modifier
@@ -711,44 +753,6 @@ fun NoteCard(
                                 color = palette.secondaryColor
                             )
                         )
-                    }
-
-                    if (category != null) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .widthIn(max = 110.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(android.graphics.Color.parseColor(category.colorHex).let { Color(it) }.copy(alpha = 0.25f))
-                                .padding(horizontal = 6.dp, vertical = 3.dp)
-                        ) {
-                            Icon(
-                                imageVector = getCategoryIcon(category.iconName),
-                                contentDescription = null,
-                                tint = android.graphics.Color.parseColor(category.colorHex).let { Color(it) },
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            val catDisplayName = when (category.name) {
-                                "Work" -> stringResource(R.string.category_work)
-                                "Personal" -> stringResource(R.string.category_personal)
-                                "Shopping" -> stringResource(R.string.category_shopping)
-                                "Health" -> stringResource(R.string.category_health)
-                                "Study" -> stringResource(R.string.category_study)
-                                "Finance" -> stringResource(R.string.category_finance)
-                                else -> category.name
-                            }
-                            Text(
-                                text = catDisplayName,
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontSize = 11.sp, 
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = android.graphics.Color.parseColor(category.colorHex).let { Color(it) },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
                     }
                 }
             }

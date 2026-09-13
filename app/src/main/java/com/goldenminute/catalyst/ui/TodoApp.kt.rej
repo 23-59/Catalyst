@@ -1,0 +1,205 @@
+diff a/app/src/main/java/com/goldenminute/catalyst/ui/TodoApp.kt b/app/src/main/java/com/goldenminute/catalyst/ui/TodoApp.kt	(rejected hunks)
+@@ -3945,92 +3948,131 @@ fun TodoCard(
+                                                         BorderColor.copy(alpha = 0.15f),
+                                                         RoundedCornerShape(12.dp)
+                                                     )
+-                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+-                                                verticalAlignment = Alignment.CenterVertically
++                                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                                             ) {
+-                                                Box(
+-                                                    modifier = Modifier
+-                                                        .size(32.dp)
+-                                                        .background(
+-                                                            if (rec.isPomodoro) NeonPurple.copy(
+-                                                                alpha = 0.15f
+-                                                            ) else NeonCyan.copy(alpha = 0.15f),
+-                                                            CircleShape
+-                                                        ),
+-                                                    contentAlignment = Alignment.Center
++                                                Row(
++                                                    modifier = Modifier.fillMaxWidth(),
++                                                    verticalAlignment = Alignment.CenterVertically
+                                                 ) {
+-                                                    Icon(
+-                                                        imageVector = if (rec.isPomodoro) Icons.Default.Timer else Icons.Default.HourglassBottom,
+-                                                        contentDescription = null,
+-                                                        tint = if (rec.isPomodoro) NeonPurple else NeonCyan,
+-                                                        modifier = Modifier.size(16.dp)
+-                                                    )
+-                                                }
++                                                    Box(
++                                                        modifier = Modifier
++                                                            .size(32.dp)
++                                                            .background(
++                                                                if (rec.isPomodoro) NeonPurple.copy(
++                                                                    alpha = 0.15f
++                                                                ) else NeonCyan.copy(alpha = 0.15f),
++                                                                CircleShape
++                                                            ),
++                                                        contentAlignment = Alignment.Center
++                                                    ) {
++                                                        Icon(
++                                                            imageVector = if (rec.isPomodoro) Icons.Default.Timer else Icons.Default.HourglassBottom,
++                                                            contentDescription = null,
++                                                            tint = if (rec.isPomodoro) NeonPurple else NeonCyan,
++                                                            modifier = Modifier.size(16.dp)
++                                                        )
++                                                    }
+ 
+-                                                Spacer(modifier = Modifier.width(12.dp))
++                                                    Spacer(modifier = Modifier.width(12.dp))
+ 
+-                                                Column(modifier = Modifier.weight(1f)) {
+-                                                    val typeLabel =
+-                                                        if (rec.isPomodoro) stringResource(R.string.pomodoro_label) else stringResource(
+-                                                            R.string.stopwatch_label
++                                                    Column(modifier = Modifier.weight(1f)) {
++                                                        val typeLabel =
++                                                            if (rec.isPomodoro) stringResource(R.string.pomodoro_label) else stringResource(
++                                                                R.string.stopwatch_label
++                                                            )
++                                                        Text(
++                                                            text = stringResource(R.string.session_format, idx + 1, typeLabel),
++                                                            style = MaterialTheme.typography.labelSmall,
++                                                            fontWeight = FontWeight.Bold,
++                                                            color = TextPrimary
+                                                         )
++                                                        Spacer(modifier = Modifier.height(2.dp))
++                                                        val isPersianLog =
++                                                            getSystemLocale().language == "fa"
++                                                        val formattedDate =
++                                                            remember(rec.timestamp, isPersianLog) {
++                                                                try {
++                                                                    if (isPersianLog) {
++                                                                        JalaliCalendarHelper.formatJalali(
++                                                                            rec.timestamp,
++                                                                            includeTime = true,
++                                                                            includeYear = true
++                                                                        )
++                                                                    } else {
++                                                                        val date = Date(rec.timestamp)
++                                                                        val format = SimpleDateFormat(
++                                                                            "MMM dd, yyyy GÇó h:mm a",
++                                                                            getSystemLocale()
++                                                                        )
++                                                                        format.format(date)
++                                                                    }
++                                                                } catch (_: Exception) {
++                                                                    ""
++                                                                }
++                                                            }
++                                                        if (formattedDate.isNotEmpty()) {
++                                                            Text(
++                                                                text = formattedDate,
++                                                                style = MaterialTheme.typography.labelSmall,
++                                                                color = TextSecondary
++                                                            )
++                                                        }
++                                                    }
++
+                                                     Text(
+-                                                        text = stringResource(R.string.session_format, idx + 1, typeLabel),
++                                                        text = durationStr,
+                                                         style = MaterialTheme.typography.labelSmall,
+                                                         fontWeight = FontWeight.Bold,
+-                                                        color = TextPrimary
++                                                        color = if (rec.isPomodoro) NeonPurple else NeonCyan,
++                                                        modifier = Modifier.padding(end = 8.dp)
+                                                     )
+-                                                    Spacer(modifier = Modifier.height(2.dp))
+-                                                    val isPersianLog =
+-                                                        getSystemLocale().language == "fa"
+-                                                    val formattedDate =
+-                                                        remember(rec.timestamp, isPersianLog) {
+-                                                            try {
+-                                                                if (isPersianLog) {
+-                                                                    JalaliCalendarHelper.formatJalali(
+-                                                                        rec.timestamp,
+-                                                                        includeTime = true,
+-                                                                        includeYear = true
+-                                                                    )
+-                                                                } else {
+-                                                                    val date = Date(rec.timestamp)
+-                                                                    val format = SimpleDateFormat(
+-                                                                        "MMM dd, yyyy GÇó h:mm a",
+-                                                                        getSystemLocale()
+-                                                                    )
+-                                                                    format.format(date)
+-                                                                }
+-                                                            } catch (_: Exception) {
+-                                                                ""
+-                                                            }
+-                                                        }
+-                                                    if (formattedDate.isNotEmpty()) {
+-                                                        Text(
+-                                                            text = formattedDate,
+-                                                            style = MaterialTheme.typography.labelSmall,
+-                                                            color = TextSecondary
++
++                                                    IconButton(
++                                                        onClick = { onDeleteSessionRecord(idx) },
++                                                        modifier = Modifier.size(24.dp)
++                                                    ) {
++                                                        Icon(
++                                                            imageVector = Icons.Default.Close,
++                                                            contentDescription = "Delete record",
++                                                            tint = TextSecondary.copy(alpha = 0.6f),
++                                                            modifier = Modifier.size(14.dp)
+                                                         )
+                                                     }
+                                                 }
+ 
+-                                                Text(
+-                                                    text = durationStr,
+-                                                    style = MaterialTheme.typography.labelSmall,
+-                                                    fontWeight = FontWeight.Bold,
+-                                                    color = if (rec.isPomodoro) NeonPurple else NeonCyan,
+-                                                    modifier = Modifier.padding(end = 8.dp)
+-                                                )
+-
+-                                                IconButton(
+-                                                    onClick = { onDeleteSessionRecord(idx) },
+-                                                    modifier = Modifier.size(24.dp)
+-                                                ) {
+-                                                    Icon(
+-                                                        imageVector = Icons.Default.Close,
+-                                                        contentDescription = "Delete record",
+-                                                        tint = TextSecondary.copy(alpha = 0.6f),
+-                                                        modifier = Modifier.size(14.dp)
++                                                if (rec.appSections.isNotEmpty()) {
++                                                    Spacer(modifier = Modifier.height(8.dp))
++                                                    HorizontalDivider(
++                                                        color = BorderColor.copy(alpha = 0.15f),
++                                                        thickness = 1.dp,
++                                                        modifier = Modifier.padding(bottom = 8.dp)
+                                                     )
++                                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
++                                                        rec.appSections.forEach { (section, ms) ->
++                                                            val sHrs = ms / 3600000
++                                                            val sMins = (ms % 3600000) / 60000
++                                                            val sSecs = (ms % 60000) / 1000
++                                                            val sDur = if (sHrs > 0) "${sHrs}h ${sMins}m" else if (sMins > 0) "${sMins}m" else "${sSecs}s"
++                                                            
++                                                            Row(
++                                                                modifier = Modifier.fillMaxWidth(),
++                                                                horizontalArrangement = Arrangement.SpaceBetween,
++                                                                verticalAlignment = Alignment.CenterVertically
++                                                            ) {
++                                                                Text(
++                                                                    text = section,
++                                                                    style = MaterialTheme.typography.bodySmall,
++                                                                    color = TextSecondary
++                                                                )
++                                                                Text(
++                                                                    text = sDur,
++                                                                    style = MaterialTheme.typography.labelSmall,
++                                                                    fontWeight = FontWeight.Bold,
++                                                                    color = TextPrimary.copy(alpha = 0.8f)
++                                                                )
++                                                            }
++                                                        }
++                                                    }
+                                                 }
+                                             }
+                                         }

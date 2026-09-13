@@ -5,7 +5,8 @@ import kotlinx.coroutines.flow.Flow
 class TodoRepository(
     private val todoDao: TodoDao,
     private val categoryDao: CategoryDao,
-    private val noteDao: NoteDao
+    private val noteDao: NoteDao,
+    private val doomscrollVideoDao: DoomscrollVideoDao? = null
 ) {
     val allTodos: Flow<List<TodoItem>> = todoDao.getAllTodos()
     val allCategories: Flow<List<Category>> = categoryDao.getAllCategories()
@@ -109,5 +110,17 @@ class TodoRepository(
 
     suspend fun deleteNoteById(id: Int) {
         noteDao.deleteNoteById(id)
+    }
+
+    // --- Doomscroll records ---
+    val allDoomscrollRecords: Flow<List<DoomscrollVideoRecord>> =
+        doomscrollVideoDao?.getAllRecords() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+
+    suspend fun insertDoomscrollRecord(record: DoomscrollVideoRecord): Long {
+        return doomscrollVideoDao?.insertRecord(record) ?: -1L
+    }
+
+    suspend fun clearAllDoomscrollRecords() {
+        doomscrollVideoDao?.clearAllRecords()
     }
 }

@@ -118,12 +118,13 @@ class MainActivity : ComponentActivity() {
             val languageCode by viewModel.appLanguage.collectAsState()
             val isFirstTime by viewModel.isFirstTime.collectAsState()
 
-            var showBatteryDialog by remember { mutableStateOf(false) }
+            var onboardingStep by remember { androidx.compose.runtime.mutableIntStateOf(0) }
 
             val palette = com.goldenminute.catalyst.ui.theme.getThemePalette(themeKey, customThemeColor, customThemeApplyToBg)
             val isLight = themeKey == "slate_light" || themeKey.startsWith("custom_light")
 
             LaunchedEffect(themeKey, customThemeColor, customThemeApplyToBg) {
+                com.goldenminute.catalyst.ui.theme.applyThemePalette(palette, isLight)
                 enableEdgeToEdge(
                     statusBarStyle = if (isLight) {
                         androidx.activity.SystemBarStyle.light(palette.obsidianBlack.toArgb(), palette.obsidianBlack.toArgb())
@@ -139,40 +140,15 @@ class MainActivity : ComponentActivity() {
                 window.decorView.setBackgroundColor(palette.obsidianBlack.toArgb())
             }
             
-            val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-                contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-            ) { isGranted ->
-                if (!isGranted) {
-                    android.util.Log.w("MainActivity", "Notification permission denied.")
-                }
-            }
-
-            LaunchedEffect(Unit) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    }
-                }
-            }
-            
             DisposableEffect(lifecycleOwner, context) {
                 val observer = LifecycleEventObserver { _, event ->
                     when (event) {
                         Lifecycle.Event.ON_RESUME -> {
                             viewModel.checkAndResetDailyTasks()
-                            // Stop the service when app returns to foreground
-                            context.stopService(Intent(context, TimerService::class.java))
+                            com.goldenminute.catalyst.ui.theme.applyThemePalette(palette, isLight)
                         }
                         Lifecycle.Event.ON_STOP -> {
-                            // Start background service if a timer is running
-                            if (TimerStateManager.isTimerRunning.value) {
-                                val serviceIntent = Intent(context, TimerService::class.java)
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                    context.startForegroundService(serviceIntent)
-                                } else {
-                                    context.startService(serviceIntent)
-                                }
-                            }
+                            // Service handles itself now
                         }
                         else -> {}
                     }
@@ -258,13 +234,21 @@ class MainActivity : ComponentActivity() {
                         Box(modifier = Modifier.fillMaxSize()) {
                             // Actual content (new theme)
                             if (isFirstTime) {
-                                WelcomeScreen(
-                                    viewModel = viewModel,
-                                    onGetStarted = { 
-                                        viewModel.completeWelcome()
-                                        showBatteryDialog = true
-                                    }
-                                )
+                                if (onboardingStep == 0) {
+                                    WelcomeScreen(
+                                        viewModel = viewModel,
+                                        onGetStarted = { 
+                                            onboardingStep = 1
+                                        }
+                                    )
+                                } else {
+                                    com.goldenminute.catalyst.ui.PermissionsSetupScreen(
+                                        viewModel = viewModel,
+                                        onFinished = {
+                                            viewModel.completeWelcome()
+                                        }
+                                    )
+                                }
                             } else {
                                 TodoApp(viewModel = viewModel)
                             }
@@ -291,39 +275,6 @@ class MainActivity : ComponentActivity() {
                                         blendMode = BlendMode.Clear
                                     )
                                 }
-                            }
-                            
-                            if (showBatteryDialog) {
-                                val batteryTitle = stringResource(R.string.battery_opt_title)
-                                val batteryMessage = stringResource(R.string.battery_opt_message)
-                                val openSettingsText = stringResource(R.string.open_settings)
-                                val cancelText = stringResource(R.string.cancel)
-
-                                AlertDialog(
-                                    onDismissRequest = { showBatteryDialog = false },
-                                    title = { Text(batteryTitle) },
-                                    text = { Text(batteryMessage) },
-                                    confirmButton = {
-                                        TextButton(onClick = {
-                                            showBatteryDialog = false
-                                            try {
-                                                val intent = Intent().apply {
-                                                    action = android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
-                                                }
-                                                startActivity(intent)
-                                            } catch (e: Exception) {
-                                                e.printStackTrace()
-                                            }
-                                        }) {
-                                            Text(openSettingsText)
-                                        }
-                                    },
-                                    dismissButton = {
-                                        TextButton(onClick = { showBatteryDialog = false }) {
-                                            Text(cancelText)
-                                        }
-                                    }
-                                )
                             }
                         }
                     }

@@ -11,11 +11,12 @@ import kotlinx.coroutines.launch
 
 import androidx.room.migration.Migration
 
-@Database(entities = [Category::class, TodoItem::class, SubTask::class, NoteItem::class], version = 13, exportSchema = false)
+@Database(entities = [Category::class, TodoItem::class, SubTask::class, NoteItem::class, DoomscrollVideoRecord::class], version = 16, exportSchema = false)
 abstract class TodoDatabase : RoomDatabase() {
     abstract fun todoDao(): TodoDao
     abstract fun categoryDao(): CategoryDao
     abstract fun noteDao(): NoteDao
+    abstract fun doomscrollVideoDao(): DoomscrollVideoDao
 
     companion object {
         @Volatile
@@ -28,7 +29,7 @@ abstract class TodoDatabase : RoomDatabase() {
                     TodoDatabase::class.java,
                     "todo_database"
                 )
-                .addMigrations(MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                .addMigrations(MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
                 .fallbackToDestructiveMigration()
                 .addCallback(TodoDatabaseCallback(scope))
                 .build()
@@ -56,6 +57,22 @@ abstract class TodoDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE todos ADD COLUMN associatedPackageName TEXT DEFAULT NULL")
                 db.execSQL("ALTER TABLE todos ADD COLUMN trackingMode TEXT NOT NULL DEFAULT 'Strict'")
+            }
+        }
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE todos ADD COLUMN timerMode TEXT NOT NULL DEFAULT 'Pomodoro'")
+            }
+        }
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE todos ADD COLUMN associatedSections TEXT DEFAULT NULL")
+            }
+        }
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS doomscroll_videos (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, packageName TEXT NOT NULL, timestamp INTEGER NOT NULL, durationMs INTEGER NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_doomscroll_videos_timestamp ON doomscroll_videos (timestamp)")
             }
         }
     }

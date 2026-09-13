@@ -19,7 +19,7 @@ class ExampleRobolectricTest {
   fun `read string from context`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val appName = context.getString(R.string.app_name)
-    assertEquals("HyperTask", appName)
+    assertEquals("Catalyst", appName)
   }
 
   @Test
@@ -35,13 +35,28 @@ class ExampleRobolectricTest {
     val faContext = context.createConfigurationContext(config)
     
     val appNameFa = faContext.getString(R.string.app_name)
-    assertEquals("لیست کارها", appNameFa)
+    assertEquals("کاتالیست", appNameFa)
 
     val tasksDoneFa = faContext.getString(R.string.tasks_done, 2, 5)
     assertNotNull(tasksDoneFa)
     
     val dueDateFa = faContext.getString(R.string.due_date_label, "12:30 PM")
     assertNotNull(dueDateFa)
+
+    val distractingAppsFa = faContext.getString(R.string.distracting_apps_section)
+    assertEquals("برنامه‌های حواس‌پرت‌کن", distractingAppsFa)
+
+    val smartTrackingFa = faContext.getString(R.string.smart_auto_tracking_optional)
+    assertEquals("ردیابی خودکار هوشمند (اختیاری)", smartTrackingFa)
+
+    val selectAppsFa = faContext.getString(R.string.select_apps)
+    assertEquals("انتخاب برنامه‌ها...", selectAppsFa)
+
+    val appsSelectedFa = faContext.getString(R.string.apps_selected, 3)
+    assertEquals("3 برنامه انتخاب شد", appsSelectedFa)
+
+    val autoStartTimerFa = faContext.getString(R.string.auto_start_timer_subtext)
+    assertEquals("شروع خودکار تایمر هنگام باز کردن این برنامه.", autoStartTimerFa)
   }
 
   @Test

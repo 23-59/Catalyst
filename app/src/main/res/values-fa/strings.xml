@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="app_name">کاتالیست</string>
     <string name="action_delete">حذف</string>
     <string name="action_deselect_all">لغو انتخاب همه</string>
     <string name="action_select_all">انتخاب همه</string>
@@ -23,7 +24,6 @@
     <string name="battery_opt_title">بهینه‌سازی باتری</string>
     <string name="battery_opt_message">برای اطمینان از عملکرد صحیح تایمرها و یادآورها در پس‌زمینه، لطفاً حالت بهینه‌سازی باتری کاتالیست را روی «بدون محدودیت» (Unrestricted) تنظیم کنید.</string>
     <string name="open_settings">تنظیمات</string>
-    <string name="app_name">کاتالیست</string>
     <string name="apply_theme_to_background">اعمال پوسته روی پس‌زمینه</string>
     <string name="assign_color_theme">تخصیص پوسته رنگی</string>
     <string name="assign_color_theme_desc">یک پوسته جذاب را برای اعمال بر روی %1$d مورد انتخاب شده برگزینید:</string>
@@ -119,6 +119,8 @@
     <string name="focus_history_stopwatch">تاریخچه تمرکز کرونومتر</string>
     <string name="focus_length_min">مدت زمان تمرکز (دقیقه)</string>
     <string name="focus_session_history">تاریخچه جلسات تمرکز</string>
+    <string name="app_sections_title">بخش‌های برنامه</string>
+    <string name="unified_sections">بخش‌های یکپارچه</string>
     <string name="focused_time_badge">%1$d دقیقه تمرکز</string>
     <string name="gemini_api_key">کلید API جمنای</string>
     <string name="generating_status">در حال تولید...</string>
@@ -351,4 +353,86 @@
     <string name="word_count_suffix">کلمه</string>
     <string name="pull_down_fullscreen">برای تمام صفحه به پایین بکشید</string>
     <string name="release_for_fullscreen">برای تمام صفحه رها کنید</string>
+    <string name="permission_required">نیاز به دسترسی</string>
+    <string name="accessibility_service_description_dialog">ردیابی هوشمند برای تشخیص برنامه در حال اجرا به سرویس دسترسی نیاز دارد. لطفاً آن را در تنظیمات فعال کنید.</string>
+    <string name="permission_overlay_required">برای عملکرد صحیح بررسی ذهن‌آگاهی، دسترسی «نمایش روی سایر برنامه‌ها» لازم است. برای فعال‌سازی ضربه بزنید.</string>
+    <string name="mindfulness_check_title">بررسی ذهن‌آگاهی</string>
+    <string name="mindfulness_check_desc">در حال وب‌گردی بی‌هدف هستید یا به دنبال الهام گرفتن؟</string>
+    <string name="mindfulness_check_desc_context">بیش از ۵ دقیقه است که در بخش %1$s در %2$s مشغول هستید. در حال وب‌گردی بی‌هدف هستید یا به دنبال الهام گرفتن؟</string>
+    <string name="mindfulness_check_desc_app">بیش از ۵ دقیقه است که در %1$s مشغول هستید. در حال وب‌گردی بی‌هدف هستید یا به دنبال الهام گرفتن؟</string>
+    <string name="mindfulness_check_inspiration">الهام گرفتن</string>
+    <string name="mindfulness_check_doomscrolling">وب‌گردی بی‌هدف</string>
+    <string name="accessibility_service_description">ردیاب هوشمند کاتالیست برای شروع خودکار تایمرها هنگام باز کردن برنامه‌های خاص و جلوگیری از اسکرول بی‌هدف به این دسترسی نیاز دارد.</string>
+    <string name="distracting_apps_section">برنامه‌های حواس‌پرت‌کن</string>
+    <string name="manage_distracting_apps">مدیریت برنامه‌هایی که هنگام استفاده طولانی‌مدت، بررسی ذهن‌آگاهی را فعال می‌کنند.</string>
+    <string name="select_application">انتخاب برنامه</string>
+    <string name="search_apps">جستجوی برنامه‌ها...</string>
+    <string name="auto_starts_with_app">شروع خودکار با برنامه</string>
+    <string name="smart_auto_tracking_optional">ردیابی خودکار هوشمند (اختیاری)</string>
+    <string name="select_apps">انتخاب برنامه‌ها...</string>
+    <string name="apps_selected">%d برنامه انتخاب شد</string>
+    <string name="auto_start_timer_subtext">شروع خودکار تایمر هنگام باز کردن این برنامه.</string>
+    <string name="section_filter">فیلتر بخش</string>
+    <string name="all_sections">همه بخش‌ها (کل اپلیکیشن)</string>
+    <string name="select_sections">انتخاب بخش‌های خاص</string>
+    <string name="sections_selected">%d بخش انتخاب شده</string>
+    <string name="section_filter_hint">فقط زمان صرف شده در بخش‌های خاص را ردیابی کن</string>
+    <string name="close">بستن</string>
+    <string name="back">بازگشت</string>
+
+    <!-- Permissions Setup Onboarding -->
+    <string name="permissions_setup_title">مجوزهای برنامه</string>
+    <string name="permissions_setup_subtitle">برای فعال‌سازی تمامی قابلیت‌های کاتالیست، دسترسی‌های زیر را فعال کنید.</string>
+    <string name="perm_notifications_title">اعلان‌ها و یادآورها</string>
+    <string name="perm_notifications_desc">دریافت به موقع یادآورها و هشدارهای کارها برای از دست ندادن زمان‌بندی‌ها.</string>
+    <string name="perm_microphone_title">میکروفون و فرمان صوتی</string>
+    <string name="perm_microphone_desc">ایجاد سریع کارها و یادداشت‌ها با استفاده از فرامین صوتی هوش مصنوعی.</string>
+    <string name="perm_exact_alarms_title">هشدارهای دقیق</string>
+    <string name="perm_exact_alarms_desc">اطمینان از به صدا درآمدن دقیق یادآورها در ثانیه مشخص بدون تاخیر سیستم.</string>
+    <string name="perm_overlay_title">نمایش روی سایر برنامه‌ها</string>
+    <string name="perm_overlay_desc">نمایش کادر بررسی ذهن‌آگاهی به عنوان پنجره شناور روی برنامه‌های حواس‌پرت‌کننده.</string>
+    <string name="perm_accessibility_title">ردیابی هوشمند خودکار</string>
+    <string name="perm_accessibility_desc">تشخیص خودکار باز شدن برنامه‌های متصل به کارها و ثبت زمان تمرکز.</string>
+    <string name="perm_battery_title">فعالیت نامحدود در پس‌زمینه</string>
+    <string name="perm_battery_desc">جلوگیری از توقف تایمرها و هشدارهای پس‌زمینه توسط بهینه‌ساز باتری.</string>
+    <string name="grant_all_permissions">اعطای همه مجوزها</string>
+    <string name="grant_permission">اعطا</string>
+    <string name="permission_granted">فعال شد</string>
+    <string name="continue_to_app">ورود به کاتالیست</string>
+    <string name="skip_for_now">بعداً</string>
+
+    <!-- Session History Screen -->
+    <string name="session_history_title">تاریخچه جلسات</string>
+    <string name="session_history_empty">هنوز جلسه تمرکزی ثبت نشده.\nبرای شروع ردیابی، تایمر را فعال کنید.</string>
+    <string name="session_history_today_empty">امروز هیچ جلسه تمرکزی ثبت نشده است.\nبرای شروع ردیابی، تایمر را فعال کنید.</string>
+    <string name="today_focus_time">زمان تمرکز</string>
+    <string name="today_sessions_count">تعداد جلسات</string>
+    <string name="longest_session">طولانی‌ترین</string>
+    <string name="best_record">بهترین رکورد</string>
+    <string name="session_history_total_today">امروز</string>
+    <string name="session_history_total_week">این هفته</string>
+    <string name="session_history_total_all">کل</string>
+    <string name="session_history_week_empty">در این هفته هیچ جلسه تمرکزی ثبت نشده است.\nبرای شروع ردیابی، تایمر را فعال کنید.</string>
+    <string name="session_history_filter_all">همه</string>
+    <string name="session_history_day_total">مجموع روز</string>
+    <string name="session_history_sessions">%d جلسه</string>
+    <string name="session_history_1_session">۱ جلسه</string>
+    <string name="view_all_sessions">مشاهده همه</string>
+    <string name="session_sections">بخش‌ها</string>
+    <string name="delete_session">حذف جلسه</string>
+    <string name="delete_session_confirm">آیا از حذف این رکورد جلسه مطمئن هستید؟</string>
+    <string name="assigned_app_indicator">برنامه متصل</string>
+    <string name="linked_app">برنامه متصل</string>
+    <string name="doomscrolling_alert_title">گفتگوی هشدار دوم‌اسکرولینگ</string>
+    <string name="doomscrolling_alert_desc">تشخیص اسکرول ریلز اینستاگرام و نمایش گفتگوی هوشیاری</string>
+    <string name="doomscrolling_stats_summary">%1$d ویدیو • %2$s</string>
+    <string name="doomscrolling_insights_title">بینش‌های وب‌گردی بی‌هدف</string>
+    <string name="doomscrolling_insights_desc">ویدیوهای علامت‌زده‌شده به عنوان وب‌گردی بی‌هدف در ریلز اینستاگرام</string>
+    <string name="doomscrolling_total_videos">ویدیوهای علامت‌زده</string>
+    <string name="doomscrolling_total_time">کل زمان تلف‌شده</string>
+    <string name="doomscrolling_avg_time">میانگین زمان هر ویدیو</string>
+    <string name="doomscrolling_history_title">تاریخچه ویدیوهای ثبت‌شده</string>
+    <string name="doomscrolling_no_records">هنوز ویدیوی وب‌گردی بی‌هدف ثبت نشده است</string>
+    <string name="clear_history">پاک کردن تاریخچه</string>
+    <string name="clear_history_confirm">آیا از پاک کردن تاریخچه وب‌گردی بی‌هدف مطمئن هستید؟</string>
 </resources>

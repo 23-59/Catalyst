@@ -25,8 +25,11 @@ object DataStoreKeys {
     val GEMINI_API_KEY = stringPreferencesKey("gemini_api_key")
     val AI_HUB_PROMPT = stringPreferencesKey("ai_hub_prompt")
     val AI_DIGESTION_PROMPT = stringPreferencesKey("ai_digestion_prompt")
+    val DISTRACTING_APPS = stringSetPreferencesKey("distracting_apps")
+    val DOOMSCROLLING_ALERT_ENABLED = booleanPreferencesKey("doomscrolling_alert_enabled")
     val DAILY_FOCUS_GOAL_HOURS = floatPreferencesKey("daily_focus_goal_hours")
     val FREE_MODE_SESSIONS = stringPreferencesKey("free_mode_sessions")
+
     val FOCUS_LENGTH = longPreferencesKey("focus_length")
     val SHORT_BREAK_LENGTH = longPreferencesKey("short_break_length")
     val LONG_BREAK_LENGTH = longPreferencesKey("long_break_length")

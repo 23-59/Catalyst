@@ -1,5 +1,7 @@
 package com.goldenminute.catalyst.ui
 
+import androidx.compose.ui.graphics.asImageBitmap
+
 import android.app.DatePickerDialog
 import kotlinx.coroutines.launch
 import android.app.TimePickerDialog
@@ -280,6 +282,7 @@ fun TodoApp(viewModel: TodoViewModel) {
 
     var todoToShowDetails by remember { mutableStateOf<TodoItem?>(null) }
     var noteToShowDetails by remember { mutableStateOf<NoteItem?>(null) }
+    var sessionHistoryTodo by remember { mutableStateOf<TodoItem?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val hapticFeedback = LocalHapticFeedback.current
@@ -1597,6 +1600,9 @@ fun TodoApp(viewModel: TodoViewModel) {
                                                         index
                                                     )
                                                 },
+                                                onViewAllSessions = {
+                                                    sessionHistoryTodo = item
+                                                },
                                                 onSmartSuggest = { onComplete ->
                                                     viewModel.generateSubTasks(
                                                         title = item.title,
@@ -1631,7 +1637,10 @@ fun TodoApp(viewModel: TodoViewModel) {
                     "Focus" -> {
                         FocusScreen(
                             viewModel = viewModel,
-                            innerPadding = innerPadding
+                            innerPadding = innerPadding,
+                            onViewAllSessions = { todo ->
+                                sessionHistoryTodo = todo
+                            }
                         )
                     }
 
@@ -1764,8 +1773,40 @@ fun TodoApp(viewModel: TodoViewModel) {
                     todoToDelete = todoToShowDetails
                     todoToShowDetails = null
                 },
-                onToggleSubTask = { sub -> viewModel.toggleSubTaskCompleted(sub.id, !sub.isCompleted) }
+                onToggleSubTask = { sub -> viewModel.toggleSubTaskCompleted(sub.id, !sub.isCompleted) },
+                onViewAllSessions = {
+                    sessionHistoryTodo = todoToShowDetails
+                    todoToShowDetails = null
+                }
             )
+        }
+
+        val layoutDirection = LocalLayoutDirection.current
+        AnimatedVisibility(
+            visible = sessionHistoryTodo != null,
+            enter = slideInHorizontally(initialOffsetX = { if (layoutDirection == LayoutDirection.Rtl) -it else it }) + fadeIn(),
+            exit = slideOutHorizontally(targetOffsetX = { if (layoutDirection == LayoutDirection.Rtl) -it else it }) + fadeOut(),
+            modifier = Modifier.zIndex(100f)
+        ) {
+            BackHandler {
+                sessionHistoryTodo = null
+            }
+            if (sessionHistoryTodo != null) {
+                val currentTaskForHistory = allTodos.find { it.id == sessionHistoryTodo!!.id } ?: sessionHistoryTodo!!
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                ) {
+                    SessionHistoryScreen(
+                        todo = currentTaskForHistory,
+                        onBack = { sessionHistoryTodo = null },
+                        onDeleteRecord = { index ->
+                            viewModel.deleteSessionRecord(currentTaskForHistory.id, index)
+                        }
+                    )
+                }
+            }
         }
 
         if (noteToShowDetails != null) {
@@ -1804,24 +1845,26 @@ fun TodoApp(viewModel: TodoViewModel) {
                     showAddTaskDialog = false
                     todoToEdit = null
                 },
-                onConfirm = { title, desc, dueDate, priority, catId, hasReminder, reminderTime, isDaily, hasTime, isReminderRepeating, associatedPackageName, trackingMode ->
+                onConfirm = { title, desc, dueDate, priority, catId, hasReminder, reminderTime, isDaily, hasTime, isReminderRepeating, associatedPackageNames, timerMode, associatedSections ->
                     viewModel.insertTodo(
-                        TodoItem(
-                            id = todoToEdit?.id ?: 0,
+                        (todoToEdit ?: TodoItem(
+                            title = title,
+                            description = desc,
+                            position = 0
+                        )).copy(
                             title = title,
                             description = desc,
                             dueDate = dueDate,
                             priority = priority,
                             categoryId = catId,
-                            isCompleted = todoToEdit?.isCompleted ?: false,
                             hasReminder = hasReminder,
                             reminderTime = reminderTime,
                             isDaily = isDaily,
                             hasTime = hasTime,
-                            position = todoToEdit?.position ?: 0,
                             isReminderRepeating = isReminderRepeating,
-                            associatedPackageName = associatedPackageName,
-                            trackingMode = trackingMode
+                            associatedPackageNames = associatedPackageNames,
+                            timerMode = timerMode,
+                            associatedSections = associatedSections
                         )
                     )
                     showAddTaskDialog = false
@@ -2369,7 +2412,6 @@ fun TodoApp(viewModel: TodoViewModel) {
                 }
             }
         }
-
     }
 }
 
@@ -2873,9 +2915,11 @@ fun TodoCard(
     onAddSubTask: (String) -> Unit,
     onDeleteSubTask: (SubTask) -> Unit,
     onDeleteSessionRecord: (Int) -> Unit,
+    onViewAllSessions: () -> Unit = {},
     onSmartSuggest: (onComplete: () -> Unit) -> Unit = {}
 ) {
 
+    val context = LocalContext.current
     val highLabel = stringResource(R.string.priority_high_label)
     val mediumLabel = stringResource(R.string.priority_medium_label)
     val lowLabel = stringResource(R.string.priority_low_label)
@@ -3486,6 +3530,68 @@ fun TodoCard(
                                                     )
                                                 }
                                             }
+
+                                            // Assigned App indicator
+                                            if (!todo.associatedPackageNames.isNullOrBlank()) {
+                                                val isPersian = getSystemLocale().language == "fa"
+                                                val appPackages = remember(todo.associatedPackageNames) {
+                                                    todo.associatedPackageNames.split(",").filter { it.isNotBlank() }
+                                                }
+                                                val appLabel = remember(appPackages, todo.associatedSections, context) {
+                                                    val pm = context.packageManager
+                                                    val names = appPackages.mapNotNull { pkg ->
+                                                        try {
+                                                            val appInfo = pm.getApplicationInfo(pkg, 0)
+                                                            pm.getApplicationLabel(appInfo).toString()
+                                                        } catch (_: Exception) {
+                                                            null
+                                                        }
+                                                    }
+                                                    val sectionsMap = com.goldenminute.catalyst.service.SmartTrackerService.parseSectionsString(todo.associatedSections)
+                                                    when {
+                                                        names.isEmpty() -> if (isPersian) "برنامه متصل" else "Linked App"
+                                                        names.size == 1 -> {
+                                                            val pkg = appPackages.first()
+                                                            val secs = sectionsMap[pkg]
+                                                            if (!secs.isNullOrEmpty()) {
+                                                                val secText = secs.map { com.goldenminute.catalyst.service.SmartTrackerService.localizeSectionName(it, isPersian) }.joinToString(if (isPersian) "، " else ", ")
+                                                                "${names.first()} ($secText)"
+                                                            } else {
+                                                                names.first()
+                                                            }
+                                                        }
+                                                        else -> {
+                                                            val first = names.first()
+                                                            val extra = names.size - 1
+                                                            if (isPersian) "$first (+${JalaliCalendarHelper.toPersianDigits(extra.toString())})" else "$first (+$extra)"
+                                                        }
+                                                    }
+                                                }
+
+                                                Row(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .background(NeonBlue.copy(alpha = 0.12f))
+                                                        .border(0.5.dp, NeonBlue.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Apps,
+                                                        contentDescription = stringResource(R.string.assigned_app_indicator),
+                                                        tint = NeonBlue,
+                                                        modifier = Modifier.size(12.dp)
+                                                    )
+                                                    Text(
+                                                        text = appLabel,
+                                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                                        color = NeonBlue,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
                                         }
 
                                         // Redesigned Focus Stats (Assigned Times)
@@ -3523,7 +3629,7 @@ fun TodoCard(
                                                             modifier = Modifier.size(14.dp)
                                                         )
                                                         Text(
-                                                            text = "${todayPomodoroCycles} cycle${if (todayPomodoroCycles > 1) "s" else ""}",
+                                                            text = if (todayPomodoroCycles == 1) stringResource(R.string.pomodoro_cycles_count, 1) else stringResource(R.string.pomodoro_cycles_count_plural, todayPomodoroCycles),
                                                             color = TextPrimary,
                                                             style = MaterialTheme.typography.labelSmall,
                                                             fontWeight = FontWeight.Bold
@@ -3802,6 +3908,17 @@ fun TodoCard(
                                         color = TextSecondary
                                     )
                                 }
+                                TextButton(
+                                    onClick = onViewAllSessions,
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.view_all_sessions),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = NeonCyan,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                                 Icon(
                                     imageVector = if (isSessionsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                     contentDescription = if (isSessionsExpanded) "Collapse" else "Expand",
@@ -3935,7 +4052,7 @@ fun TodoCard(
                                                 }
                                             }
 
-                                            Row(
+                                            Column(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .clip(RoundedCornerShape(12.dp))
@@ -3945,9 +4062,12 @@ fun TodoCard(
                                                         BorderColor.copy(alpha = 0.15f),
                                                         RoundedCornerShape(12.dp)
                                                     )
-                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                                verticalAlignment = Alignment.CenterVertically
+                                                    .padding(horizontal = 12.dp, vertical = 8.dp)
                                             ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
                                                 Box(
                                                     modifier = Modifier
                                                         .size(32.dp)
@@ -4032,9 +4152,46 @@ fun TodoCard(
                                                         modifier = Modifier.size(14.dp)
                                                     )
                                                 }
+                                                } // Close Row here
+                                            if (rec.appSections.isNotEmpty()) {
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                HorizontalDivider(
+                                                    color = BorderColor.copy(alpha = 0.15f),
+                                                    thickness = 1.dp,
+                                                    modifier = Modifier.padding(bottom = 8.dp)
+                                                )
+                                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                    rec.appSections.forEach { (section, ms) ->
+                                                        val sHrs = ms / 3600000
+                                                        val sMins = (ms % 3600000) / 60000
+                                                        val sSecs = (ms % 60000) / 1000
+                                                        val sDur = if (sHrs > 0) "${sHrs}h ${sMins}m" else if (sMins > 0) "${sMins}m" else "${sSecs}s"
+                                                        
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            val isPersianSection = getSystemLocale().language == "fa"
+                                                            Text(
+                                                                text = com.goldenminute.catalyst.service.SmartTrackerService.localizeSectionName(section, isPersianSection),
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = TextSecondary
+                                                            )
+                                                            Text(
+                                                                text = sDur,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = TextPrimary.copy(alpha = 0.8f)
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
+                }
+            }
                                 }
                             }
                         }
@@ -4307,7 +4464,6 @@ fun TodoCard(
                 }
             }
         }
-}
 
 
 @Composable
@@ -4614,8 +4770,10 @@ fun TaskDetailsDialog(
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    onToggleSubTask: (SubTask) -> Unit
+    onToggleSubTask: (SubTask) -> Unit,
+    onViewAllSessions: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     val isPersian = getSystemLocale().language == "fa"
     val priorityColor = when (todo.priority) {
         2 -> PriorityHigh
@@ -5021,6 +5179,70 @@ fun TaskDetailsDialog(
                                 )
                             }
                         }
+
+                        // Assigned App Chip
+                        if (!todo.associatedPackageNames.isNullOrBlank()) {
+                            val appPackages = remember(todo.associatedPackageNames) {
+                                todo.associatedPackageNames.split(",").filter { it.isNotBlank() }
+                            }
+                            val appLabel = remember(appPackages, todo.associatedSections, context) {
+                                val pm = context.packageManager
+                                val names = appPackages.mapNotNull { pkg ->
+                                    try {
+                                        val appInfo = pm.getApplicationInfo(pkg, 0)
+                                        pm.getApplicationLabel(appInfo).toString()
+                                    } catch (_: Exception) {
+                                        null
+                                    }
+                                }
+                                val sectionsMap = com.goldenminute.catalyst.service.SmartTrackerService.parseSectionsString(todo.associatedSections)
+                                when {
+                                    names.isEmpty() -> if (isPersian) "برنامه متصل" else "Linked App"
+                                    names.size == 1 -> {
+                                        val pkg = appPackages.first()
+                                        val secs = sectionsMap[pkg]
+                                        if (!secs.isNullOrEmpty()) {
+                                            val secText = secs.map { com.goldenminute.catalyst.service.SmartTrackerService.localizeSectionName(it, isPersian) }.joinToString(if (isPersian) "، " else ", ")
+                                            "${names.first()}: $secText"
+                                        } else {
+                                            names.first()
+                                        }
+                                    }
+                                    else -> {
+                                        val first = names.first()
+                                        val extra = names.size - 1
+                                        if (isPersian) "$first (+${JalaliCalendarHelper.toPersianDigits(extra.toString())})" else "$first (+$extra)"
+                                    }
+                                }
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(NeonBlue.copy(alpha = 0.12f))
+                                    .border(
+                                        1.dp,
+                                        NeonBlue.copy(alpha = 0.3f),
+                                        RoundedCornerShape(10.dp)
+                                    )
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Apps,
+                                    contentDescription = null,
+                                    tint = NeonBlue,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = appLabel,
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = NeonBlue
+                                )
+                            }
+                        }
                     }
 
                     // Subtasks (Checklist)
@@ -5061,60 +5283,113 @@ fun TaskDetailsDialog(
                         }
                     }
 
-                    // Focus History (if any)
-                    val dbRecords =
+                    // Focus History & App Sections (if any)
+                    val dbRecords = remember(todo.recordedTimes) {
                         RecordedTimeItem.parseList(todo.recordedTimes)
+                    }
                     if (dbRecords.isNotEmpty()) {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text(
-                                stringResource(R.string.focus_session_history),
-                                style = MaterialTheme.typography.titleSmall,
-                                color = NeonCyan,
-                                fontWeight = FontWeight.Bold
+                        val unifiedSections = remember(dbRecords) {
+                            val map = mutableMapOf<String, Long>()
+                            for (rec in dbRecords) {
+                                for ((sec, time) in rec.appSections) {
+                                    map[sec] = (map[sec] ?: 0L) + time
+                                }
+                            }
+                            if (map.keys.any { it != "Unknown" && it != "General" }) {
+                                map.filterKeys { it != "Unknown" && it != "General" }
+                            } else {
+                                map.filterKeys { it != "Unknown" }
+                            }
+                        }
+
+                        val appPackage = remember(todo.associatedPackageNames) {
+                            todo.associatedPackageNames?.split(",")?.firstOrNull { it.isNotBlank() }
+                        }
+
+                        if (unifiedSections.isNotEmpty()) {
+                            UnifiedSectionsView(
+                                sections = unifiedSections,
+                                packageName = appPackage,
+                                isPersian = isPersian
                             )
-                            dbRecords.forEachIndexed { idx, rec ->
+                        }
+
+                        // Session list / view all sessions
+                        val pomRecords = remember(dbRecords) { dbRecords.filter { it.isPomodoro } }
+                        val hasNonSectionSessions = unifiedSections.isEmpty() || pomRecords.isNotEmpty()
+
+                        if (hasNonSectionSessions || dbRecords.size > 1) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(SlateDark)
-                                        .padding(12.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        imageVector = if (rec.isPomodoro) Icons.Default.Timer else Icons.Default.HourglassBottom,
-                                        contentDescription = null,
-                                        tint = if (rec.isPomodoro) NeonPurple else NeonCyan,
-                                        modifier = Modifier.size(18.dp)
+                                    Text(
+                                        stringResource(R.string.focus_session_history),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = NeonCyan,
+                                        fontWeight = FontWeight.Bold
                                     )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
+                                    TextButton(
+                                        onClick = onViewAllSessions,
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
                                         Text(
-                                            stringResource(
-                                                R.string.session_label,
-                                                idx + 1
-                                            ),
+                                            stringResource(R.string.view_all_sessions),
+                                            color = NeonCyan,
                                             style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TextPrimary
+                                            fontWeight = FontWeight.Bold
                                         )
-                                        val dateStr = if (isPersian) {
-                                            JalaliCalendarHelper.formatJalali(
-                                                rec.timestamp,
-                                                includeTime = true,
-                                                includeYear = true
+                                    }
+                                }
+
+                                if (unifiedSections.isEmpty()) {
+                                    dbRecords.forEachIndexed { idx, rec ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(SlateDark)
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = if (rec.isPomodoro) Icons.Default.Timer else Icons.Default.HourglassBottom,
+                                                contentDescription = null,
+                                                tint = if (rec.isPomodoro) NeonPurple else NeonCyan,
+                                                modifier = Modifier.size(18.dp)
                                             )
-                                        } else {
-                                            SimpleDateFormat(
-                                                "MMM d, yyyy • h:mm a",
-                                                getSystemLocale()
-                                            ).format(Date(rec.timestamp))
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    stringResource(
+                                                        R.string.session_label,
+                                                        idx + 1
+                                                    ),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = TextPrimary
+                                                )
+                                                val dateStr = if (isPersian) {
+                                                    JalaliCalendarHelper.formatJalali(
+                                                        rec.timestamp,
+                                                        includeTime = true,
+                                                        includeYear = true
+                                                    )
+                                                } else {
+                                                    SimpleDateFormat(
+                                                        "MMM d, yyyy • h:mm a",
+                                                        getSystemLocale()
+                                                    ).format(Date(rec.timestamp))
+                                                }
+                                                Text(
+                                                    dateStr,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = TextSecondary
+                                                )
+                                            }
                                         }
-                                        Text(
-                                            dateStr,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = TextSecondary
-                                        )
                                     }
                                 }
                             }
@@ -5368,7 +5643,7 @@ fun NoteDetailsDialog(
     }
 }
 
-data class AppInfo(val name: String, val packageName: String)
+data class AppInfo(val name: String, val packageName: String, val icon: androidx.compose.ui.graphics.ImageBitmap? = null)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -5388,8 +5663,9 @@ fun AddTaskScreen(
         isDaily: Boolean,
         hasTime: Boolean,
         isReminderRepeating: Boolean,
-        associatedPackageName: String?,
-        trackingMode: String
+        associatedPackageNames: String?,
+        timerMode: String,
+        associatedSections: String?
     ) -> Unit
 ) {
     var title by remember { mutableStateOf(todoToEdit?.title ?: "") }
@@ -5404,27 +5680,48 @@ fun AddTaskScreen(
     var isDaily by remember { mutableStateOf(todoToEdit?.isDaily ?: true) }
     var isReminderRepeating by remember { mutableStateOf(todoToEdit?.isReminderRepeating ?: false) }
     var showTimePicker by remember { mutableStateOf(false) }
-    var associatedPackageName by remember { mutableStateOf(todoToEdit?.associatedPackageName) }
-    var trackingMode by remember { mutableStateOf(todoToEdit?.trackingMode ?: "Strict") }
+    var associatedPackageNames by remember(todoToEdit?.id) { mutableStateOf(todoToEdit?.associatedPackageNames?.split(",")?.filter { it.isNotBlank() }?.toSet() ?: emptySet()) }
+    var associatedSections by remember(todoToEdit?.id) { mutableStateOf(com.goldenminute.catalyst.service.SmartTrackerService.parseSectionsString(todoToEdit?.associatedSections).mapValues { it.value.toSet() }) }
     var showAppSelector by remember { mutableStateOf(false) }
+    var showAccessibilityDialog by remember { mutableStateOf(false) }
     var installedApps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     
     val context = LocalContext.current
     
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.Dispatchers.IO.invoke {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val pm = context.packageManager
             val intent = android.content.Intent(android.content.Intent.ACTION_MAIN, null).apply {
                 addCategory(android.content.Intent.CATEGORY_LAUNCHER)
             }
-            val apps = pm.queryIntentActivities(intent, 0).map {
-                AppInfo(it.loadLabel(pm).toString(), it.activityInfo.packageName)
+            val apps = pm.queryIntentActivities(intent, 0).map { resolveInfo ->
+                val iconDrawable = resolveInfo.loadIcon(pm)
+                val bitmap = if (iconDrawable is android.graphics.drawable.BitmapDrawable) {
+                    iconDrawable.bitmap
+                } else if (iconDrawable.intrinsicWidth > 0 && iconDrawable.intrinsicHeight > 0) {
+                    val bmp = android.graphics.Bitmap.createBitmap(
+                        iconDrawable.intrinsicWidth, 
+                        iconDrawable.intrinsicHeight, 
+                        android.graphics.Bitmap.Config.ARGB_8888
+                    )
+                    val canvas = android.graphics.Canvas(bmp)
+                    iconDrawable.setBounds(0, 0, canvas.width, canvas.height)
+                    iconDrawable.draw(canvas)
+                    bmp
+                } else null
+                
+                AppInfo(
+                    resolveInfo.loadLabel(pm).toString(), 
+                    resolveInfo.activityInfo.packageName, 
+                    bitmap?.asImageBitmap()
+                )
             }.distinctBy { it.packageName }.sortedBy { it.name.lowercase() }
             installedApps = apps
         }
     }
 
-    val isPersian = getSystemLocale().language == "fa"
+    val currentAppLang by viewModel.appLanguage.collectAsState()
+    val isPersian = currentAppLang == "fa" || getSystemLocale().language == "fa" || context.resources.configuration.locales[0].language == "fa"
     val calendar = remember {
         Calendar.getInstance().apply {
             todoToEdit?.dueDate?.let { timeInMillis = it }
@@ -5593,8 +5890,59 @@ fun AddTaskScreen(
         )
     }
 
+    if (showAccessibilityDialog) {
+        val isPersianDialog = isPersian
+        AppAlertDialog(
+            onDismissRequest = { showAccessibilityDialog = false },
+            title = {
+                Text(
+                    if (isPersianDialog) "نیاز به دسترسی" else stringResource(R.string.permission_required),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Text(
+                    if (isPersianDialog) "ردیابی هوشمند برای تشخیص برنامه در حال اجرا به سرویس دسترسی نیاز دارد. لطفاً آن را در تنظیمات فعال کنید."
+                    else stringResource(R.string.accessibility_service_description_dialog),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showAccessibilityDialog = false
+                    context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }) {
+                    Text(
+                        if (isPersianDialog) "باز کردن تنظیمات" else stringResource(R.string.open_settings),
+                        color = NeonCyan
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAccessibilityDialog = false }) {
+                    Text(
+                        if (isPersianDialog) "لغو" else stringResource(R.string.cancel),
+                        color = TextSecondary
+                    )
+                }
+            },
+            containerColor = SlateDark,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary
+        )
+    }
+
     if (showAppSelector) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { showAppSelector = false }) {
+        var appSearchQuery by remember { mutableStateOf("") }
+        val filteredApps = remember(appSearchQuery, installedApps) {
+            if (appSearchQuery.isBlank()) installedApps
+            else installedApps.filter { 
+                it.name.contains(appSearchQuery, ignoreCase = true) || 
+                it.packageName.contains(appSearchQuery, ignoreCase = true) 
+            }
+        }
+        
+        AppDialog(onDismissRequest = { showAppSelector = false }) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -5605,10 +5953,26 @@ fun AddTaskScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Select Application",
+                        text = stringResource(R.string.select_application),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = TextPrimary,
                         modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    
+                    OutlinedTextField(
+                        value = appSearchQuery,
+                        onValueChange = { appSearchQuery = it },
+                        placeholder = { Text(stringResource(R.string.search_apps), color = TextSecondary) },
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp).height(50.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonCyan,
+                            unfocusedBorderColor = BorderColor,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            cursorColor = NeonCyan
+                        ),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium
                     )
                     
                     if (installedApps.isEmpty()) {
@@ -5617,36 +5981,168 @@ fun AddTaskScreen(
                         }
                     } else {
                         LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
-                            items(installedApps) { app ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            associatedPackageName = app.packageName
-                                            showAppSelector = false
+                            items(filteredApps) { app ->
+                                val isSelected = associatedPackageNames.contains(app.packageName)
+                                val knownSections = com.goldenminute.catalyst.service.SmartTrackerService.KNOWN_APP_SECTIONS[app.packageName]
+                                val selectedSections = associatedSections[app.packageName] ?: emptySet()
+
+                                val toggleApp = {
+                                    val current = associatedPackageNames.toMutableSet()
+                                    val newSections = associatedSections.toMutableMap()
+                                    if (current.contains(app.packageName)) {
+                                        current.remove(app.packageName)
+                                        newSections.remove(app.packageName)
+                                    } else {
+                                        current.add(app.packageName)
+                                    }
+                                    associatedPackageNames = current
+                                    associatedSections = newSections
+                                }
+
+                                Column {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable { toggleApp() }
+                                            .padding(vertical = 12.dp, horizontal = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (app.icon != null) {
+                                            androidx.compose.foundation.Image(
+                                                bitmap = app.icon,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(28.dp)
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Default.Android,
+                                                contentDescription = null,
+                                                tint = TextSecondary,
+                                                modifier = Modifier.size(28.dp)
+                                            )
                                         }
-                                        .padding(vertical = 12.dp, horizontal = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Android,
-                                        contentDescription = null,
-                                        tint = TextSecondary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(
-                                            text = app.name,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = TextPrimary
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = app.name,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = TextPrimary
+                                            )
+                                            if (isSelected && knownSections != null && selectedSections.isNotEmpty()) {
+                                                Text(
+                                                    text = stringResource(R.string.sections_selected, selectedSections.size),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = NeonCyan
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = app.packageName,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = TextSecondary
+                                                )
+                                            }
+                                        }
+                                        Checkbox(
+                                            checked = isSelected,
+                                            onCheckedChange = { toggleApp() },
+                                            colors = CheckboxDefaults.colors(
+                                                checkedColor = NeonCyan,
+                                                uncheckedColor = BorderColor,
+                                                checkmarkColor = ObsidianBlack
+                                            )
                                         )
-                                        Text(
-                                            text = app.packageName,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = TextSecondary
-                                        )
+                                    }
+
+                                    // Section picker for known apps (only shown when app is selected)
+                                    if (isSelected && knownSections != null) {
+                                        val isPersianLocale = context.resources.configuration.locales[0].language == "fa" || java.util.Locale.getDefault().language == "fa"
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(start = 40.dp, end = 8.dp, bottom = 8.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(SlateDark.copy(alpha = 0.5f))
+                                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                        ) {
+                                            Text(
+                                                text = stringResource(R.string.section_filter),
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                color = NeonCyan,
+                                                modifier = Modifier.padding(bottom = 4.dp)
+                                            )
+                                            // "All Sections" option
+                                            val selectAllSections = {
+                                                val newSections = associatedSections.toMutableMap()
+                                                newSections.remove(app.packageName)
+                                                associatedSections = newSections
+                                            }
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .clickable { selectAllSections() }
+                                                    .padding(vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                RadioButton(
+                                                    selected = selectedSections.isEmpty(),
+                                                    onClick = { selectAllSections() },
+                                                    colors = RadioButtonDefaults.colors(selectedColor = NeonCyan, unselectedColor = BorderColor),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = stringResource(R.string.all_sections),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = if (selectedSections.isEmpty()) TextPrimary else TextSecondary
+                                                )
+                                            }
+                                            // Individual section checkboxes
+                                            knownSections.forEach { section ->
+                                                val isSectionChecked = selectedSections.contains(section)
+                                                val toggleSection = {
+                                                    val currentSet = associatedSections[app.packageName] ?: emptySet()
+                                                    val newSet = if (currentSet.contains(section)) {
+                                                        currentSet - section
+                                                    } else {
+                                                        currentSet + section
+                                                    }
+                                                    val newSections = associatedSections.toMutableMap()
+                                                    if (newSet.isEmpty()) {
+                                                        newSections.remove(app.packageName)
+                                                    } else {
+                                                        newSections[app.packageName] = newSet
+                                                    }
+                                                    associatedSections = newSections
+                                                }
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .clickable { toggleSection() }
+                                                        .padding(vertical = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Checkbox(
+                                                        checked = isSectionChecked,
+                                                        onCheckedChange = { toggleSection() },
+                                                        colors = CheckboxDefaults.colors(
+                                                            checkedColor = NeonCyan,
+                                                            uncheckedColor = BorderColor,
+                                                            checkmarkColor = ObsidianBlack
+                                                        ),
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text(
+                                                        text = com.goldenminute.catalyst.service.SmartTrackerService.localizeSectionName(section, isPersianLocale),
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = if (isSectionChecked) TextPrimary else TextSecondary
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -5659,7 +6155,7 @@ fun AddTaskScreen(
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(onClick = { showAppSelector = false }) {
-                            Text(stringResource(R.string.cancel), color = TextSecondary)
+                            Text(stringResource(R.string.close), color = TextSecondary)
                         }
                     }
                 }
@@ -5719,6 +6215,10 @@ fun AddTaskScreen(
                             )
                         }
                     }
+
+                    // Timer Mode Selection State
+                    var timerMode by remember { androidx.compose.runtime.mutableStateOf(todoToEdit?.timerMode ?: "Pomodoro") }
+                    val timerOptions = listOf("Pomodoro", "Stopwatch")
 
                     // Title Input
                     OutlinedTextField(
@@ -6273,23 +6773,31 @@ fun AddTaskScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Smart Auto-Tracking (Optional)",
+                                text = stringResource(R.string.smart_auto_tracking_optional),
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                 color = TextPrimary
                             )
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                         
-                        val displayAppName = installedApps.find { it.packageName == associatedPackageName }?.name ?: associatedPackageName
+                        val selectedAppNames = installedApps.filter { associatedPackageNames.contains(it.packageName) }.map { it.name }
+                        val displayAppName = when {
+                            selectedAppNames.isEmpty() -> null
+                            selectedAppNames.size == 1 -> selectedAppNames.first()
+                            selectedAppNames.size <= 2 -> selectedAppNames.joinToString(", ")
+                            else -> stringResource(R.string.apps_selected, selectedAppNames.size)
+                        }
                         
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(50.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .border(1.dp, BorderColor, RoundedCornerShape(8.dp))
+                                .clip(RoundedCornerShape(14.dp))
                                 .background(SlateDark)
-                                .clickable { showAppSelector = true }
+                                .border(1.dp, SlateLight.copy(alpha = 0.2f), RoundedCornerShape(14.dp))
+                                .clickable {
+                                    showAppSelector = true
+                                }
                                 .padding(horizontal = 16.dp),
                             contentAlignment = Alignment.CenterStart
                         ) {
@@ -6299,70 +6807,183 @@ fun AddTaskScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = displayAppName ?: "Select an App...",
+                                    text = displayAppName ?: stringResource(R.string.select_apps),
                                     color = if (displayAppName != null) TextPrimary else TextSecondary,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
-                                if (associatedPackageName != null) {
+                                if (associatedPackageNames.isNotEmpty()) {
                                     Icon(
                                         imageVector = Icons.Default.Close,
-                                        contentDescription = "Clear",
+                                        contentDescription = stringResource(R.string.clear_action),
                                         tint = TextSecondary,
                                         modifier = Modifier
                                             .size(18.dp)
-                                            .clickable { associatedPackageName = null }
+                                            .clickable {
+                                                associatedPackageNames = emptySet()
+                                                associatedSections = emptyMap()
+                                            }
                                     )
                                 } else {
                                     Icon(
                                         imageVector = Icons.Default.ArrowDropDown,
-                                        contentDescription = "Select App",
-                                        tint = TextSecondary
+                                        contentDescription = stringResource(R.string.select_application),
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                             }
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Display selected section chips if any
+                        val hasSelectedSections = associatedSections.values.any { it.isNotEmpty() }
+                        if (hasSelectedSections) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            val isPersianForChips = context.resources.configuration.locales[0].language == "fa" || java.util.Locale.getDefault().language == "fa"
+                            androidx.compose.foundation.layout.FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                associatedSections.forEach { (pkg, sections) ->
+                                    if (sections.isNotEmpty()) {
+                                        val appName = installedApps.find { it.packageName == pkg }?.name ?: pkg
+                                        sections.forEach { sec ->
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(NeonCyan.copy(alpha = 0.12f))
+                                                    .border(0.5.dp, NeonCyan.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                                            ) {
+                                                Text(
+                                                    text = "$appName: ${com.goldenminute.catalyst.service.SmartTrackerService.localizeSectionName(sec, isPersianForChips)}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = NeonCyan
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "Auto-start timer when you open this app.",
+                            text = stringResource(R.string.auto_start_timer_subtext),
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
 
-                        if (associatedPackageName?.isNotEmpty() == true) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Tracking Mode:",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = TextPrimary
-                                )
-                                Row(
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Material 3 style Segmented Button for Timer Mode
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(40.dp)
+                                .border(1.dp, BorderColor, androidx.compose.foundation.shape.CircleShape)
+                                .clip(androidx.compose.foundation.shape.CircleShape),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            timerOptions.forEachIndexed { index, mode ->
+                                val isSelected = timerMode == mode
+                                Box(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(SlateLight)
-                                        .padding(4.dp)
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .background(if (isSelected) NeonCyan.copy(alpha = 0.15f) else Color.Transparent)
+                                        .clickable { timerMode = mode },
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    val modes = listOf("Strict", "Creative")
-                                    modes.forEach { mode ->
-                                        val isSelected = trackingMode == mode
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(if (isSelected) NeonCyan else Color.Transparent)
-                                                .clickable { trackingMode = mode }
-                                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                                        ) {
-                                            Text(
-                                                text = mode,
-                                                color = if (isSelected) SlateDark else TextSecondary,
-                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = NeonCyan,
+                                                modifier = Modifier.size(16.dp).padding(end = 4.dp)
                                             )
                                         }
+                                        Text(
+                                            text = if (mode == "Pomodoro") stringResource(R.string.pomodoro_label) else stringResource(R.string.stopwatch_label),
+                                            color = if (isSelected) NeonCyan else TextSecondary,
+                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                                        )
                                     }
+                                }
+                                if (index < timerOptions.size - 1) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(1.dp)
+                                            .fillMaxHeight()
+                                            .background(BorderColor)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (associatedPackageNames.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            // Let's remind them about SYSTEM_ALERT_WINDOW if they link an app
+                            if (!android.provider.Settings.canDrawOverlays(context)) {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        val intent = android.content.Intent(
+                                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                            android.net.Uri.parse("package:${context.packageName}")
+                                        )
+                                        context.startActivity(intent)
+                                    },
+                                    colors = CardDefaults.cardColors(containerColor = PriorityHigh.copy(alpha = 0.1f)),
+                                    border = BorderStroke(1.dp, PriorityHigh)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Warning, contentDescription = "Warning", tint = PriorityHigh)
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            stringResource(R.string.permission_overlay_required),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextPrimary
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
+
+                            val doomscrollingAlertEnabled by viewModel.doomscrollingAlertEnabled.collectAsState()
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.setDoomscrollingAlertEnabled(!doomscrollingAlertEnabled)
+                                    }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = doomscrollingAlertEnabled,
+                                    onCheckedChange = { viewModel.setDoomscrollingAlertEnabled(it) },
+                                    colors = CheckboxDefaults.colors(checkedColor = NeonCyan)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.doomscrolling_alert_title),
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        color = TextPrimary
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.doomscrolling_alert_desc),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary
+                                    )
                                 }
                             }
                         }
@@ -6487,26 +7108,32 @@ fun AddTaskScreen(
                         Button(
                             onClick = {
                                 if (title.isNotBlank()) {
-                                    // Compile trigger times
-                                    val duetime =
-                                        if (selectedDate != null) calendar.timeInMillis else null
-                                    val alarmtime =
-                                        if (hasReminder && duetime != null) duetime else null
-                                    val hasTime = selectedTimeStr.isNotEmpty()
-                                    onConfirm(
-                                        title,
-                                        desc,
-                                        duetime,
-                                        priority,
-                                        selectedCategoryId,
-                                        hasReminder,
-                                        alarmtime,
-                                        isDaily,
-                                        hasTime,
-                                        isReminderRepeating,
-                                        associatedPackageName,
-                                        trackingMode
-                                    )
+                                    if (associatedPackageNames.isNotEmpty() && !isAccessibilityServiceEnabled(context, com.goldenminute.catalyst.service.SmartTrackerService::class.java)) {
+                                        showAccessibilityDialog = true
+                                    } else {
+                                        // Compile trigger times
+                                        val duetime =
+                                            if (selectedDate != null) calendar.timeInMillis else null
+                                        val alarmtime =
+                                            if (hasReminder && duetime != null) duetime else null
+                                        val hasTime = selectedTimeStr.isNotEmpty()
+                                        val cleanedSections = associatedSections.filterKeys { associatedPackageNames.contains(it) }
+                                        onConfirm(
+                                            title,
+                                            desc,
+                                            duetime,
+                                            priority,
+                                            selectedCategoryId,
+                                            hasReminder,
+                                            alarmtime,
+                                            isDaily,
+                                            hasTime,
+                                            isReminderRepeating,
+                                            associatedPackageNames.joinToString(","),
+                                            timerMode,
+                                            com.goldenminute.catalyst.service.SmartTrackerService.serializeSectionsMap(cleanedSections)
+                                        )
+                                    }
                                 }
                             },
                             modifier = Modifier
@@ -7278,16 +7905,118 @@ fun AddTaskScreen(
                             }
                         }
                     }
-        }
     }
+}
 
 fun Context.findActivity(): android.app.Activity? {
-    var cur = this
-    while (cur is ContextWrapper) {
-        if (cur is android.app.Activity) {
-            return cur
-        }
-        cur = cur.baseContext
+    var context = this
+    while (context is android.content.ContextWrapper) {
+        if (context is android.app.Activity) return context
+        context = context.baseContext
     }
     return null
 }
+
+fun isAccessibilityServiceEnabled(context: android.content.Context, service: Class<out android.accessibilityservice.AccessibilityService> = com.goldenminute.catalyst.service.SmartTrackerService::class.java): Boolean {
+    // 1. Direct in-memory running check
+    if (com.goldenminute.catalyst.service.SmartTrackerService.isRunning) return true
+
+    // 2. Official AccessibilityManager enabled services check
+    try {
+        val am = context.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE) as? android.view.accessibility.AccessibilityManager
+        val enabledList = am?.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+        if (enabledList != null && enabledList.any { info ->
+            info.resolveInfo?.serviceInfo?.packageName == context.packageName ||
+            (info.id != null && info.id.contains(context.packageName, ignoreCase = true) && info.id.contains("SmartTrackerService", ignoreCase = true))
+        }) {
+            return true
+        }
+    } catch (_: Exception) {}
+
+    // 3. Settings.Secure check with flexible matching (full, short, and package matching)
+    try {
+        val expectedComponentName = android.content.ComponentName(context, service).flattenToString()
+        val expectedShortComponentName = android.content.ComponentName(context, service).flattenToShortString()
+        val enabledServicesSetting = android.provider.Settings.Secure.getString(
+            context.contentResolver,
+            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+
+        val stringColonSplitter = android.text.TextUtils.SimpleStringSplitter(':')
+        stringColonSplitter.setString(enabledServicesSetting)
+        while (stringColonSplitter.hasNext()) {
+            val componentNameString = stringColonSplitter.next()
+            if (componentNameString.equals(expectedComponentName, ignoreCase = true) ||
+                componentNameString.equals(expectedShortComponentName, ignoreCase = true) ||
+                (componentNameString.contains(context.packageName, ignoreCase = true) && componentNameString.contains("SmartTrackerService", ignoreCase = true))
+            ) {
+                return true
+            }
+        }
+    } catch (_: Exception) {}
+
+    return false
+}
+
+@Composable
+fun MindfulnessCheckDialog(
+    appName: String = "",
+    sectionName: String = "",
+    onDismiss: () -> Unit,
+    onInspiration: () -> Unit,
+    onDoomscrolling: () -> Unit
+) {
+    val isLight = !androidx.compose.foundation.isSystemInDarkTheme()
+    val bgColor = if (isLight) Color(0xFFF0F0F0) else Color(0xFF1E1E1E)
+    val textColor = if (isLight) Color.Black else Color.White
+    val subtitleColor = if (isLight) Color(0xFF666666) else Color(0xFFAAAAAA)
+    val accentColor = if (isLight) Color(0xFF3b82f6) else Color(0xFF8b5cf6)
+
+    // Build contextual description
+    val contextDesc = if (appName.isNotEmpty() && sectionName.isNotEmpty()) {
+        stringResource(R.string.mindfulness_check_desc_context, sectionName, appName)
+    } else if (appName.isNotEmpty()) {
+        stringResource(R.string.mindfulness_check_desc_app, appName)
+    } else {
+        stringResource(R.string.mindfulness_check_desc)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = bgColor,
+        title = {
+            Text(stringResource(R.string.mindfulness_check_title), color = textColor, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column {
+                if (appName.isNotEmpty()) {
+                    Text(
+                        text = if (sectionName.isNotEmpty()) "$appName • $sectionName" else appName,
+                        color = accentColor,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                Text(contextDesc, color = textColor)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onInspiration,
+                colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+            ) {
+                Text(stringResource(R.string.mindfulness_check_inspiration), color = Color.White)
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDoomscrolling,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = textColor)
+            ) {
+                Text(stringResource(R.string.mindfulness_check_doomscrolling))
+            }
+        }
+    )
+}
+

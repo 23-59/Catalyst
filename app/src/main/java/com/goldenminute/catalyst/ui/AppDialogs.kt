@@ -14,11 +14,13 @@ fun AppDialog(
     properties: DialogProperties = DialogProperties(),
     content: @Composable () -> Unit
 ) {
+    val currentLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]?.language
+        ?: Locale.getDefault().language
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismissRequest,
         properties = properties
     ) {
-        LocalizedContent(localeCode = Locale.getDefault().language) {
+        LocalizedContent(localeCode = currentLocale) {
             content()
         }
     }
@@ -41,7 +43,8 @@ fun AppAlertDialog(
     tonalElevation: androidx.compose.ui.unit.Dp = androidx.compose.material3.AlertDialogDefaults.TonalElevation,
     properties: DialogProperties = DialogProperties()
 ) {
-    val currentLocale = Locale.getDefault().language
+    val currentLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]?.language
+        ?: Locale.getDefault().language
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = { LocalizedContent(currentLocale) { confirmButton() } },

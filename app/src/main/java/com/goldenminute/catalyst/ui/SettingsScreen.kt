@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.goldenminute.catalyst.R
+import androidx.compose.ui.graphics.asImageBitmap
 import com.goldenminute.catalyst.ui.theme.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -420,6 +421,216 @@ fun SettingsScreen(
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.labelSmall
                         )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(30.dp))
+
+            // Distracting Apps Section
+            Text(
+                text = stringResource(R.string.distracting_apps_section),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = animatedTextPrimary
+            )
+            Spacer(modifier = Modifier.height(5.dp))
+            Text(
+                text = stringResource(R.string.manage_distracting_apps),
+                style = MaterialTheme.typography.bodySmall,
+                color = animatedTextSecondary
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            val distractingApps by viewModel.distractingApps.collectAsState()
+            var installedApps by remember { mutableStateOf<List<com.goldenminute.catalyst.ui.AppInfo>>(emptyList()) }
+            val context = androidx.compose.ui.platform.LocalContext.current
+
+            LaunchedEffect(Unit) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val pm = context.packageManager
+                    val intent = android.content.Intent(android.content.Intent.ACTION_MAIN, null).apply {
+                        addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+                    }
+                    val apps = pm.queryIntentActivities(intent, 0).map { resolveInfo ->
+                        val iconDrawable = resolveInfo.loadIcon(pm)
+                        val bitmap = if (iconDrawable is android.graphics.drawable.BitmapDrawable) {
+                            iconDrawable.bitmap
+                        } else if (iconDrawable.intrinsicWidth > 0 && iconDrawable.intrinsicHeight > 0) {
+                            val bmp = android.graphics.Bitmap.createBitmap(
+                                iconDrawable.intrinsicWidth, 
+                                iconDrawable.intrinsicHeight, 
+                                android.graphics.Bitmap.Config.ARGB_8888
+                            )
+                            val canvas = android.graphics.Canvas(bmp)
+                            iconDrawable.setBounds(0, 0, canvas.width, canvas.height)
+                            iconDrawable.draw(canvas)
+                            bmp
+                        } else null
+                        
+                        com.goldenminute.catalyst.ui.AppInfo(
+                            resolveInfo.loadLabel(pm).toString(), 
+                            resolveInfo.activityInfo.packageName, 
+                            bitmap?.asImageBitmap()
+                        )
+                    }.distinctBy { it.packageName }.sortedBy { it.name.lowercase() }
+                    installedApps = apps
+                }
+            }
+
+            var showAppSelector by remember { mutableStateOf(false) }
+
+            Button(
+                onClick = { showAppSelector = true },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = SlateDark),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, animatedBorderColor)
+            ) {
+                Text(text = stringResource(R.string.distracting_apps_section), color = animatedTextPrimary, fontWeight = FontWeight.Bold)
+            }
+
+            if (showAppSelector) {
+                AppDialog(onDismissRequest = { showAppSelector = false }) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 400.dp, max = 500.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(stringResource(R.string.distracting_apps_section), color = TextPrimary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            LazyColumn(modifier = Modifier.weight(1f)) {
+                                items(installedApps) { app ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth().clickable {
+                                            val current = distractingApps.toMutableSet()
+                                            if (current.contains(app.packageName)) {
+                                                current.remove(app.packageName)
+                                            } else {
+                                                current.add(app.packageName)
+                                            }
+                                            viewModel.setDistractingApps(current)
+                                        }.padding(vertical = 8.dp)
+                                    ) {
+                                        Checkbox(
+                                            checked = distractingApps.contains(app.packageName),
+                                            onCheckedChange = { chk ->
+                                                val current = distractingApps.toMutableSet()
+                                                if (chk) current.add(app.packageName) else current.remove(app.packageName)
+                                                viewModel.setDistractingApps(current)
+                                            },
+                                            colors = CheckboxDefaults.colors(checkedColor = animatedPrimaryColor)
+                                        )
+                                        
+                                        if (app.icon != null) {
+                                            androidx.compose.foundation.Image(
+                                                bitmap = app.icon,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(32.dp).padding(end = 8.dp)
+                                            )
+                                        } else {
+                                            Spacer(modifier = Modifier.size(32.dp).padding(end = 8.dp))
+                                        }
+                                        
+                                        Text(app.name, color = TextPrimary, maxLines = 1)
+                                    }
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = { showAppSelector = false }) {
+                                    Text(stringResource(R.string.ok), color = animatedPrimaryColor)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            val doomscrollingAlertEnabled by viewModel.doomscrollingAlertEnabled.collectAsState()
+            val totalDoomscrollVideos by viewModel.totalDoomscrollVideosCount.collectAsState()
+            val totalDoomscrollDurationMs by viewModel.totalDoomscrollDurationMs.collectAsState()
+            val isPersian = java.util.Locale.getDefault().language == "fa"
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        viewModel.setDoomscrollingAlertEnabled(!doomscrollingAlertEnabled)
+                    },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SlateDark),
+                border = BorderStroke(1.dp, animatedBorderColor)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 12.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.doomscrolling_alert_title),
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = animatedTextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = stringResource(R.string.doomscrolling_alert_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = animatedTextSecondary
+                            )
+                        }
+                        Switch(
+                            checked = doomscrollingAlertEnabled,
+                            onCheckedChange = { viewModel.setDoomscrollingAlertEnabled(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = animatedPrimaryColor
+                            )
+                        )
+                    }
+
+                    if (totalDoomscrollVideos > 0) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = SlateLight.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, animatedBorderColor.copy(alpha = 0.4f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                val formattedTime = formatDurationShort(totalDoomscrollDurationMs, isPersian)
+                                Text(
+                                    text = stringResource(R.string.doomscrolling_stats_summary, totalDoomscrollVideos, formattedTime),
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = animatedPrimaryColor
+                                )
+                                Text(
+                                    text = stringResource(R.string.tab_insights),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = animatedTextSecondary
+                                )
+                            }
+                        }
                     }
                 }
             }

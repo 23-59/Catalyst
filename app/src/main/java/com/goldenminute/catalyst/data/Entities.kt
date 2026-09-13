@@ -1,9 +1,11 @@
 package com.goldenminute.catalyst.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
 @JsonClass(generateAdapter = true)
@@ -50,19 +52,23 @@ data class TodoItem(
     val pomodoroCycles: Int = 0,
     val recordedTimes: String = "",
     val isReminderRepeating: Boolean = false,
-    val associatedPackageName: String? = null,
-    val trackingMode: String = "Strict" // "Strict" or "Creative"
+    @Json(name = "associatedPackageName") @ColumnInfo(name = "associatedPackageName") val associatedPackageNames: String? = null,
+    val trackingMode: String = "Strict", // "Strict" or "Creative"
+    val timerMode: String = "Pomodoro", // "Pomodoro" or "Stopwatch"
+    val associatedSections: String? = null // Format: "pkg:Section1|Section2,pkg2:Section3" or null for whole-app
 )
 
 @JsonClass(generateAdapter = true)
 data class RecordedTimeItem(
     val isPomodoro: Boolean,
     val value: Long,
-    val timestamp: Long
+    val timestamp: Long,
+    val appSections: Map<String, Long> = emptyMap()
 ) {
     fun toSerializedString(): String {
         val type = if (isPomodoro) "P" else "S"
-        return "$type:$value:$timestamp"
+        val sectionsStr = appSections.entries.joinToString(",") { "${it.key}=${it.value}" }
+        return if (sectionsStr.isNotEmpty()) "$type:$value:$timestamp:$sectionsStr" else "$type:$value:$timestamp"
     }
 
     companion object {
@@ -72,7 +78,19 @@ data class RecordedTimeItem(
             val isPomodoro = parts[0] == "P"
             val value = parts[1].toLongOrNull() ?: return null
             val timestamp = parts[2].toLongOrNull() ?: return null
-            return RecordedTimeItem(isPomodoro, value, timestamp)
+            
+            val appSections = mutableMapOf<String, Long>()
+            if (parts.size > 3 && parts[3].isNotEmpty()) {
+                val sectionPairs = parts[3].split(",")
+                for (pair in sectionPairs) {
+                    val kv = pair.split("=")
+                    if (kv.size == 2) {
+                        kv[1].toLongOrNull()?.let { appSections[kv[0]] = it }
+                    }
+                }
+            }
+            
+            return RecordedTimeItem(isPomodoro, value, timestamp, appSections)
         }
 
         fun parseList(serialized: String?): List<RecordedTimeItem> {
@@ -127,3 +145,16 @@ data class BackupData(
     val subTasks: List<SubTask>,
     val notes: List<NoteItem>
 )
+
+@JsonClass(generateAdapter = true)
+@Entity(
+    tableName = "doomscroll_videos",
+    indices = [Index(value = ["timestamp"])]
+)
+data class DoomscrollVideoRecord(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val packageName: String = "com.instagram.android",
+    val timestamp: Long = System.currentTimeMillis(),
+    val durationMs: Long = 0L
+)
+

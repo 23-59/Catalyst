@@ -172,6 +172,24 @@ fun getThemePalette(themeKey: String, customColor: Int, customApplyToBg: Boolean
     }
 }
 
+fun applyThemePalette(palette: AppPalette, isLight: Boolean) {
+    ObsidianBlack = palette.obsidianBlack
+    SlateDark = palette.slateDark
+    SlateLight = palette.slateLight
+    NeonCyan = palette.neonCyan
+    NeonPurple = palette.neonPurple
+    NeonBlue = palette.neonBlue
+    TextPrimary = palette.textPrimary
+    TextSecondary = palette.textSecondary
+    TextMuted = palette.textMuted
+    BorderColor = palette.borderColor
+    SurfaceElevation = if (isLight) 2.dp else 0.dp
+
+    PriorityHigh = Color(0xFFFF2D55)
+    PriorityMedium = Color(0xFFFF9500)
+    PriorityLow = Color(0xFF30D158)
+}
+
 @Composable
 fun MyApplicationTheme(
     themeKey: String = "cosmic_dark",
@@ -181,6 +199,10 @@ fun MyApplicationTheme(
     content: @Composable () -> Unit
 ) {
     val targetPalette = getThemePalette(themeKey, customColor, customApplyToBg)
+    val isLight = themeKey == "slate_light" || themeKey.startsWith("custom_light")
+
+    // Synchronously ensure global color state matches during composition
+    applyThemePalette(targetPalette, isLight)
 
     val aObsidianBlack = targetPalette.obsidianBlack
     val aSlateDark = targetPalette.slateDark
@@ -194,21 +216,7 @@ fun MyApplicationTheme(
     val aBorderColor = targetPalette.borderColor
 
     SideEffect {
-        ObsidianBlack = aObsidianBlack
-        SlateDark = aSlateDark
-        SlateLight = aSlateLight
-        NeonCyan = aNeonCyan
-        NeonPurple = aNeonPurple
-        NeonBlue = aNeonBlue
-        TextPrimary = aTextPrimary
-        TextSecondary = aTextSecondary
-        TextMuted = aTextMuted
-        BorderColor = aBorderColor
-        SurfaceElevation = if (themeKey == "slate_light" || themeKey.startsWith("custom_light")) 2.dp else 0.dp
-        
-        PriorityHigh = Color(0xFFFF2D55)
-        PriorityMedium = Color(0xFFFF9500)
-        PriorityLow = Color(0xFF30D158)
+        applyThemePalette(targetPalette, isLight)
     }
 
     val colorScheme = if (themeKey == "slate_light" || themeKey.startsWith("custom_light")) {

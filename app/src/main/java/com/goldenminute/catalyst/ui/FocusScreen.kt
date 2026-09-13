@@ -1,6 +1,11 @@
 package com.goldenminute.catalyst.ui
 
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -48,7 +53,8 @@ import java.util.Locale
 @Composable
 fun FocusScreen(
     viewModel: TodoViewModel,
-    innerPadding: PaddingValues
+    innerPadding: PaddingValues,
+    onViewAllSessions: (TodoItem) -> Unit = {}
 ) {
     val todos by viewModel.allTodosList.collectAsState()
     val incompleteTodos = todos.filter { !it.isCompleted }
@@ -345,16 +351,34 @@ fun FocusScreen(
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         if (activeDbRecords.isNotEmpty()) {
-                            val sessionsText = if (activeDbRecords.size == 1) {
-                                stringResource(R.string.session_records_count, activeDbRecords.size)
-                            } else {
-                                stringResource(R.string.session_records_count_plural, activeDbRecords.size)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                val sessionsText = if (activeDbRecords.size == 1) {
+                                    stringResource(R.string.session_records_count, activeDbRecords.size)
+                                } else {
+                                    stringResource(R.string.session_records_count_plural, activeDbRecords.size)
+                                }
+                                Text(
+                                    text = sessionsText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSecondary
+                                )
+                                if (selectedTodo != null) {
+                                    TextButton(
+                                        onClick = { selectedTodo?.let { onViewAllSessions(it) } },
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.view_all_sessions),
+                                            color = if (isPomodoro) NeonPurple else NeonCyan,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
                             }
-                            Text(
-                                text = sessionsText,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TextSecondary
-                            )
                         }
                     }
                     
@@ -751,14 +775,16 @@ fun FocusScreen(
                 // Tasks
                 incompleteTodos.forEach { item ->
                     val isSelected = selectedTodo?.id == item.id
+                    val isAppLinked = !item.associatedPackageNames.isNullOrEmpty()
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
                             .background(if (isSelected) NeonCyan.copy(alpha = 0.2f) else SlateDark)
-                            .clickable { 
+                            .clickable(enabled = !isAppLinked) { 
                                 TimerStateManager.activeTaskId.value = item.id
                                 TimerStateManager.isIdleMode.value = false
+                                TimerStateManager.isPomodoro.value = (item.timerMode == "Pomodoro")
                             }
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -766,14 +792,24 @@ fun FocusScreen(
                         if (isSelected) {
                             Icon(Icons.Default.RadioButtonChecked, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(24.dp))
                         } else {
-                            Icon(Icons.Default.RadioButtonUnchecked, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(24.dp))
+                            Icon(Icons.Default.RadioButtonUnchecked, contentDescription = null, tint = if (isAppLinked) TextSecondary.copy(alpha = 0.35f) else TextSecondary, modifier = Modifier.size(24.dp))
                         }
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = item.title,
-                            color = if (isSelected) NeonCyan else TextPrimary,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = item.title,
+                                color = if (isSelected) NeonCyan else if (isAppLinked) TextSecondary.copy(alpha = 0.5f) else TextPrimary,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            if (isAppLinked) {
+                                Text(
+                                    text = stringResource(R.string.auto_starts_with_app),
+                                    color = TextSecondary.copy(alpha = 0.5f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
                     }
                 }
             }

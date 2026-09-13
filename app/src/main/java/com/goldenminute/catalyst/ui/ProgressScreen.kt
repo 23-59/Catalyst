@@ -892,6 +892,9 @@ fun InsightsContent(viewModel: TodoViewModel, todos: List<TodoItem>, categories:
                 }
             }
         }
+
+        // Doomscrolling Insights Section
+        DoomscrollingInsightsCard(viewModel = viewModel)
     }
 }
 
@@ -1101,6 +1104,312 @@ fun CategoryDistributionSection(todos: List<TodoItem>, categories: List<Category
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun DoomscrollingInsightsCard(
+    viewModel: TodoViewModel,
+    modifier: Modifier = Modifier
+) {
+    val records by viewModel.doomscrollRecords.collectAsState()
+    val totalVideos by viewModel.totalDoomscrollVideosCount.collectAsState()
+    val totalDurationMs by viewModel.totalDoomscrollDurationMs.collectAsState()
+    val isPersian = Locale.getDefault().language == "fa"
+    var isExpanded by remember { mutableStateOf(false) }
+    var showClearConfirm by remember { mutableStateOf(false) }
+
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            containerColor = SlateDark,
+            title = {
+                Text(
+                    text = stringResource(R.string.clear_history),
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(R.string.clear_history_confirm),
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearDoomscrollRecords()
+                        showClearConfirm = false
+                    }
+                ) {
+                    Text(
+                        text = stringResource(R.string.clear_action),
+                        color = PriorityHigh,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirm = false }) {
+                    Text(
+                        text = stringResource(R.string.cancel),
+                        color = TextSecondary
+                    )
+                }
+            }
+        )
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(SlateDark, RoundedCornerShape(24.dp))
+            .border(1.dp, BorderColor, RoundedCornerShape(24.dp))
+            .padding(20.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(NeonPurple.copy(alpha = 0.25f), PriorityHigh.copy(alpha = 0.25f))
+                                ),
+                                RoundedCornerShape(12.dp)
+                            )
+                            .border(
+                                1.dp,
+                                Brush.linearGradient(listOf(NeonPurple, PriorityHigh)),
+                                RoundedCornerShape(12.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SmartDisplay,
+                            contentDescription = null,
+                            tint = NeonPurple,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = stringResource(R.string.doomscrolling_insights_title),
+                            color = TextPrimary,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                        Text(
+                            text = stringResource(R.string.doomscrolling_insights_desc),
+                            color = TextSecondary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+
+                if (records.isNotEmpty()) {
+                    IconButton(
+                        onClick = { showClearConfirm = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = stringResource(R.string.clear_history),
+                            tint = TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            // Stat Metrics Row (3 stats)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Total Videos
+                val videoCountText = if (isPersian) JalaliCalendarHelper.toPersianDigits(totalVideos.toString()) else totalVideos.toString()
+                DoomscrollStatCard(
+                    title = stringResource(R.string.doomscrolling_total_videos),
+                    value = videoCountText,
+                    accentColor = NeonCyan,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Total Time Lost
+                val totalTimeText = formatDurationShort(totalDurationMs, isPersian)
+                DoomscrollStatCard(
+                    title = stringResource(R.string.doomscrolling_total_time),
+                    value = totalTimeText,
+                    accentColor = PriorityHigh,
+                    modifier = Modifier.weight(1.2f)
+                )
+
+                // Avg Time per Video
+                val avgMs = if (totalVideos > 0) totalDurationMs / totalVideos else 0L
+                val avgTimeText = if (totalVideos > 0) formatDurationShort(avgMs, isPersian) else "-"
+                DoomscrollStatCard(
+                    title = stringResource(R.string.doomscrolling_avg_time),
+                    value = avgTimeText,
+                    accentColor = NeonPurple,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            // History / Records list
+            if (records.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SlateLight.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
+                        .padding(14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stringResource(R.string.doomscrolling_no_records),
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SlateLight.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+                        .border(1.dp, BorderColor.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(16.dp))
+                ) {
+                    // Toggle Header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isExpanded = !isExpanded }
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = stringResource(R.string.doomscrolling_history_title),
+                            color = TextPrimary,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                        )
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = isExpanded,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val timeFormat = remember { SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()) }
+                            val sortedRecords = remember(records) { records.sortedByDescending { it.timestamp } }
+                            sortedRecords.forEachIndexed { index, record ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(SlateDark.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        val reelNumber = sortedRecords.size - index
+                                        val numberStr = if (isPersian) "#${JalaliCalendarHelper.toPersianDigits(reelNumber.toString())}" else "#$reelNumber"
+                                        Text(
+                                            text = numberStr,
+                                            color = NeonPurple,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                        )
+                                        val dateStr = timeFormat.format(Date(record.timestamp))
+                                        val formattedDate = if (isPersian) JalaliCalendarHelper.toPersianDigits(dateStr) else dateStr
+                                        Text(
+                                            text = formattedDate,
+                                            color = TextSecondary,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = PriorityHigh.copy(alpha = 0.15f),
+                                        border = BorderStroke(1.dp, PriorityHigh.copy(alpha = 0.3f))
+                                    ) {
+                                        Text(
+                                            text = formatDuration(record.durationMs, isPersian),
+                                            color = PriorityHigh,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DoomscrollStatCard(
+    title: String,
+    value: String,
+    accentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .background(SlateLight.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+            .border(1.dp, BorderColor.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+            .padding(vertical = 12.dp, horizontal = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = value,
+                color = accentColor,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = title,
+                color = TextSecondary,
+                style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
         }
     }
 }

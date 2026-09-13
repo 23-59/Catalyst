@@ -89,6 +89,7 @@
 
     <!-- Settings Screen -->
     <string name="settings_title">Settings</string>
+
     <string name="language_section">Language</string>
     <string name="theme_section">Theme</string>
     <string name="theme_cosmic_dark">Charcoal Modern</string>
@@ -275,6 +276,8 @@
     <string name="palette_amber_aura">Amber Aura</string>
     <string name="palette_cosmic_rose">Cosmic Rose</string>
     <string name="focus_session_history">Focus Session History</string>
+    <string name="app_sections_title">App Sections</string>
+    <string name="unified_sections">Unified Sections</string>
     <string name="generating_status">Generating...</string>
     <string name="smart_suggest">Smart Suggest</string>
     <string name="suggesting_status">Suggesting...</string>
@@ -380,4 +383,85 @@
     <string name="pull_down_fullscreen">Pull down for full screen</string>
     <string name="release_for_fullscreen">Release for full screen</string>
     <string name="accessibility_service_description">Catalyst Smart Tracker needs this to auto-start timers when you open specific apps and help you avoid doomscrolling.</string>
+    <string name="permission_required">Permission Required</string>
+    <string name="accessibility_service_description_dialog">Smart tracking requires the Accessibility Service to monitor which app is currently open. Please enable it in Settings.</string>
+    <string name="permission_overlay_required">Display over other apps permission required for Mindfulness Check to work properly. Tap to enable.</string>
+    <string name="mindfulness_check_title">Mindfulness Check</string>
+    <string name="mindfulness_check_desc">Are you doomscrolling or looking for inspiration?</string>
+    <string name="mindfulness_check_desc_context">You\'ve been browsing %1$s on %2$s for over 5 minutes. Are you doomscrolling or looking for inspiration?</string>
+    <string name="mindfulness_check_desc_app">You\'ve been on %1$s for over 5 minutes. Are you doomscrolling or looking for inspiration?</string>
+    <string name="mindfulness_check_inspiration">Inspiration</string>
+    <string name="mindfulness_check_doomscrolling">Doomscrolling</string>
+    <string name="distracting_apps_section">Distracting Apps</string>
+    <string name="manage_distracting_apps">Manage which apps should trigger the mindfulness check when you spend too much time in them.</string>
+    <string name="select_application">Select Application</string>
+    <string name="search_apps">Search apps...</string>
+    <string name="auto_starts_with_app">Auto-starts with app</string>
+    <string name="smart_auto_tracking_optional">Smart Auto-Tracking (Optional)</string>
+    <string name="select_apps">Select Apps...</string>
+    <string name="apps_selected">%d Apps Selected</string>
+    <string name="auto_start_timer_subtext">Auto-start timer when you open this app.</string>
+    <string name="section_filter">Section Filter</string>
+    <string name="all_sections">All Sections (Entire App)</string>
+    <string name="select_sections">Select specific sections</string>
+    <string name="sections_selected">%d sections selected</string>
+    <string name="section_filter_hint">Only track time in specific sections</string>
+    <string name="close">Close</string>
+    <string name="back">Back</string>
+
+    <!-- Permissions Setup Onboarding -->
+    <string name="permissions_setup_title">App Permissions</string>
+    <string name="permissions_setup_subtitle">Grant the permissions below to enable all of Catalyst\'s features.</string>
+    <string name="perm_notifications_title">Notifications &amp; Alarms</string>
+    <string name="perm_notifications_desc">Receive timely task reminders and due date alerts.</string>
+    <string name="perm_microphone_title">Microphone &amp; Voice Input</string>
+    <string name="perm_microphone_desc">Quickly create tasks and notes using AI voice commands.</string>
+    <string name="perm_exact_alarms_title">Exact Alarms</string>
+    <string name="perm_exact_alarms_desc">Ensure task reminder alarms trigger at the exact second without delays.</string>
+    <string name="perm_overlay_title">Display Over Other Apps</string>
+    <string name="perm_overlay_desc">Allows the Mindfulness Check dialog to float over distracting apps.</string>
+    <string name="perm_accessibility_title">Smart Auto-Tracking</string>
+    <string name="perm_accessibility_desc">Automatically detects assigned apps and tracks focus sessions.</string>
+    <string name="perm_battery_title">Unrestricted Background Activity</string>
+    <string name="perm_battery_desc">Prevents system battery saver from pausing timers or delaying reminders.</string>
+    <string name="grant_all_permissions">Grant All Permissions</string>
+    <string name="grant_permission">Grant</string>
+    <string name="permission_granted">Granted</string>
+    <string name="continue_to_app">Continue to Catalyst</string>
+    <string name="skip_for_now">Skip for now</string>
+
+    <!-- Session History Screen -->
+    <string name="session_history_title">Session History</string>
+    <string name="session_history_empty">No focus sessions recorded yet.\nStart a timer to begin tracking.</string>
+    <string name="session_history_today_empty">No focus sessions recorded today.\nStart a timer to begin tracking.</string>
+    <string name="today_focus_time">Focus Time</string>
+    <string name="today_sessions_count">Sessions</string>
+    <string name="longest_session">Longest</string>
+    <string name="best_record">Best</string>
+    <string name="session_history_total_today">Today</string>
+    <string name="session_history_total_week">This Week</string>
+    <string name="session_history_total_all">All Time</string>
+    <string name="session_history_week_empty">No focus sessions recorded this week.\nStart a timer to begin tracking.</string>
+    <string name="session_history_filter_all">All</string>
+    <string name="session_history_day_total">Day Total</string>
+    <string name="session_history_sessions">%d sessions</string>
+    <string name="session_history_1_session">1 session</string>
+    <string name="view_all_sessions">View All</string>
+    <string name="session_sections">Sections</string>
+    <string name="delete_session">Delete Session</string>
+    <string name="delete_session_confirm">Are you sure you want to delete this session record?</string>
+    <string name="assigned_app_indicator">Assigned App</string>
+    <string name="linked_app">Linked App</string>
+    <string name="doomscrolling_alert_title">Doomscrolling Alert Dialog</string>
+    <string name="doomscrolling_alert_desc">Recognize Instagram Reels scrolling and show mindfulness check</string>
+    <string name="doomscrolling_stats_summary">%1$d videos • %2$s</string>
+    <string name="doomscrolling_insights_title">Doomscrolling Insights</string>
+    <string name="doomscrolling_insights_desc">Videos marked as doomscrolling in Instagram Reels</string>
+    <string name="doomscrolling_total_videos">Marked Videos</string>
+    <string name="doomscrolling_total_time">Total Time Lost</string>
+    <string name="doomscrolling_avg_time">Avg Time / Video</string>
+    <string name="doomscrolling_history_title">Recorded Videos History</string>
+    <string name="doomscrolling_no_records">No doomscrolling videos recorded yet</string>
+    <string name="clear_history">Clear History</string>
+    <string name="clear_history_confirm">Are you sure you want to clear doomscrolling history?</string>
 </resources>
