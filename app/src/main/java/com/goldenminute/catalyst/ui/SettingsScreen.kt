@@ -12,6 +12,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.*
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.*
@@ -51,7 +58,6 @@ fun SettingsScreen(
     val currentTheme by viewModel.appTheme.collectAsState()
     val savedCustomThemes by viewModel.savedCustomThemes.collectAsState()
     val customThemeColor by viewModel.customThemeColor.collectAsState()
-    val userGeminiApiKey by viewModel.userGeminiApiKey.collectAsState()
     val userAiHubPrompt by viewModel.userAiHubPrompt.collectAsState()
     val userAiDigestionPrompt by viewModel.userAiDigestionPrompt.collectAsState()
     val deletedPredefinedThemes by viewModel.deletedPredefinedThemes.collectAsState()
@@ -71,8 +77,23 @@ fun SettingsScreen(
         mutableStateOf(hsv[0])
     }
     
-    var geminiKeyInput by remember { mutableStateOf(userGeminiApiKey) }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    var isAccessibilityRunning by remember { mutableStateOf(checkAccessibilityService(context)) }
+    var hasOverlayPermission by remember { mutableStateOf(checkOverlayPermission(context)) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                isAccessibilityRunning = checkAccessibilityService(context)
+                hasOverlayPermission = checkOverlayPermission(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     var showImportConfirmDialog by remember { mutableStateOf(false) }
     var pendingImportUri by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -139,239 +160,63 @@ fun SettingsScreen(
         ) {
             Spacer(modifier = Modifier.height(10.dp))
             
-            // Gemini API Key Section
-            Text(
-                text = stringResource(R.string.gemini_api_key),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = animatedTextPrimary
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            
-            var isEditingApiKey by remember(userGeminiApiKey) { mutableStateOf(userGeminiApiKey.isEmpty()) }
-            val apiKeySavedMsg = stringResource(R.string.api_key_saved)
-
-            if (!isEditingApiKey) {
+            // Custom AI Prompts Section
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(animatedPrimaryColor.copy(alpha = 0.1f))
-                        .border(1.dp, animatedPrimaryColor.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "API Key Set",
-                            tint = animatedPrimaryColor,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.api_key_configured),
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = animatedTextPrimary
-                        )
-                    }
-                    Button(
-                        onClick = { isEditingApiKey = true },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = animatedPrimaryColor,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Text(stringResource(R.string.edit_button), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            } else {
-                OutlinedTextField(
-                    value = geminiKeyInput,
-                    onValueChange = { geminiKeyInput = it },
-                    placeholder = { Text(stringResource(R.string.enter_gemini_api_key), color = animatedTextSecondary) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = animatedPrimaryColor,
-                        unfocusedBorderColor = animatedBorderColor,
-                        focusedTextColor = animatedTextPrimary,
-                        unfocusedTextColor = animatedTextPrimary
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    singleLine = true
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Button(
-                        onClick = { 
-                            viewModel.setGeminiApiKey(geminiKeyInput)
-                            android.widget.Toast.makeText(context, apiKeySavedMsg, android.widget.Toast.LENGTH_SHORT).show()
-                            isEditingApiKey = false
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = animatedPrimaryColor,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(stringResource(R.string.save_key), color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
-                    }
-                    if (userGeminiApiKey.isNotEmpty()) {
-                        OutlinedButton(
-                            onClick = { 
-                                isEditingApiKey = false
-                                geminiKeyInput = userGeminiApiKey
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = animatedTextPrimary)
-                        ) {
-                            Text(stringResource(R.string.cancel_button), fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = animatedPrimaryColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.custom_ai_prompts),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = animatedTextPrimary
+                    )
                 }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.custom_ai_prompts_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = animatedTextSecondary
+                )
             }
-            
-            Spacer(modifier = Modifier.height(30.dp))
-            
-            // Custom AI Prompts Section
-            Text(
-                text = stringResource(R.string.custom_ai_prompts),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = animatedTextPrimary
+            Spacer(modifier = Modifier.height(14.dp))
+
+            CustomPromptCard(
+                title = stringResource(R.string.intelligence_hub_prompt),
+                description = stringResource(R.string.intelligence_hub_prompt_desc),
+                icon = Icons.Default.Insights,
+                currentPrompt = userAiHubPrompt,
+                defaultPrompt = viewModel.defaultAiHubPrompt,
+                availableVariables = listOf("{APP_CONTEXT}", "{TASKS_DATA}", "{FOCUS_DATA}"),
+                animatedPrimaryColor = animatedPrimaryColor,
+                animatedBorderColor = animatedBorderColor,
+                animatedTextPrimary = animatedTextPrimary,
+                animatedTextSecondary = animatedTextSecondary,
+                onSavePrompt = { viewModel.setAiHubPrompt(it) }
             )
-            Spacer(modifier = Modifier.height(10.dp))
-            
-            var isEditingAiHubPrompt by remember { mutableStateOf(false) }
-            var aiHubPromptInput by remember(userAiHubPrompt) { mutableStateOf(userAiHubPrompt) }
-            
-            Text(stringResource(R.string.intelligence_hub_prompt), color = animatedTextSecondary, style = MaterialTheme.typography.labelMedium)
-            Spacer(modifier = Modifier.height(4.dp))
-            if (!isEditingAiHubPrompt) {
-                OutlinedTextField(
-                    value = userAiHubPrompt,
-                    onValueChange = {},
-                    readOnly = true,
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = animatedBorderColor,
-                        unfocusedBorderColor = animatedBorderColor,
-                        focusedTextColor = animatedTextPrimary,
-                        unfocusedTextColor = animatedTextPrimary
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = { isEditingAiHubPrompt = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = animatedPrimaryColor.copy(alpha=0.1f), contentColor = animatedPrimaryColor),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                ) { Text(stringResource(R.string.edit_button), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium) }
-            } else {
-                OutlinedTextField(
-                    value = aiHubPromptInput,
-                    onValueChange = { aiHubPromptInput = it },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 240.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = animatedPrimaryColor,
-                        unfocusedBorderColor = animatedBorderColor,
-                        focusedTextColor = animatedTextPrimary,
-                        unfocusedTextColor = animatedTextPrimary
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { 
-                            viewModel.setAiHubPrompt(aiHubPromptInput)
-                            isEditingAiHubPrompt = false 
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = animatedPrimaryColor, contentColor = MaterialTheme.colorScheme.onPrimary),
-                        shape = RoundedCornerShape(8.dp),
-                    ) { Text(stringResource(R.string.save_key), fontWeight = FontWeight.Bold) }
-                    OutlinedButton(
-                        onClick = { 
-                            isEditingAiHubPrompt = false
-                            aiHubPromptInput = userAiHubPrompt
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = animatedTextPrimary)
-                    ) { Text(stringResource(R.string.cancel_button), fontWeight = FontWeight.Bold) }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(20.dp))
-            
-            var isEditingAiDigestionPrompt by remember { mutableStateOf(false) }
-            var aiDigestionPromptInput by remember(userAiDigestionPrompt) { mutableStateOf(userAiDigestionPrompt) }
-            
-            Text(stringResource(R.string.daily_digest_prompt), color = animatedTextSecondary, style = MaterialTheme.typography.labelMedium)
-            Spacer(modifier = Modifier.height(4.dp))
-            if (!isEditingAiDigestionPrompt) {
-                OutlinedTextField(
-                    value = userAiDigestionPrompt,
-                    onValueChange = {},
-                    readOnly = true,
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = animatedBorderColor,
-                        unfocusedBorderColor = animatedBorderColor,
-                        focusedTextColor = animatedTextPrimary,
-                        unfocusedTextColor = animatedTextPrimary
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = { isEditingAiDigestionPrompt = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = animatedPrimaryColor.copy(alpha=0.1f), contentColor = animatedPrimaryColor),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                ) { Text(stringResource(R.string.edit_button), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium) }
-            } else {
-                OutlinedTextField(
-                    value = aiDigestionPromptInput,
-                    onValueChange = { aiDigestionPromptInput = it },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 240.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = animatedPrimaryColor,
-                        unfocusedBorderColor = animatedBorderColor,
-                        focusedTextColor = animatedTextPrimary,
-                        unfocusedTextColor = animatedTextPrimary
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { 
-                            viewModel.setAiDigestionPrompt(aiDigestionPromptInput)
-                            isEditingAiDigestionPrompt = false 
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = animatedPrimaryColor, contentColor = MaterialTheme.colorScheme.onPrimary),
-                        shape = RoundedCornerShape(8.dp),
-                    ) { Text(stringResource(R.string.save_key), fontWeight = FontWeight.Bold) }
-                    OutlinedButton(
-                        onClick = { 
-                            isEditingAiDigestionPrompt = false
-                            aiDigestionPromptInput = userAiDigestionPrompt
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = animatedTextPrimary)
-                    ) { Text(stringResource(R.string.cancel_button), fontWeight = FontWeight.Bold) }
-                }
-            }
-            
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            CustomPromptCard(
+                title = stringResource(R.string.daily_digest_prompt),
+                description = stringResource(R.string.daily_digest_prompt_desc),
+                icon = Icons.Default.AutoAwesome,
+                currentPrompt = userAiDigestionPrompt,
+                defaultPrompt = viewModel.defaultAiDigestionPrompt,
+                availableVariables = listOf("{APP_CONTEXT}", "{TASKS_DATA}", "{NOTES_DATA}"),
+                animatedPrimaryColor = animatedPrimaryColor,
+                animatedBorderColor = animatedBorderColor,
+                animatedTextPrimary = animatedTextPrimary,
+                animatedTextSecondary = animatedTextSecondary,
+                onSavePrompt = { viewModel.setAiDigestionPrompt(it) }
+            )
+
             Spacer(modifier = Modifier.height(30.dp))
 
             // Daily Focus Goal Section
@@ -427,215 +272,8 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(30.dp))
 
-            // Distracting Apps Section
-            Text(
-                text = stringResource(R.string.distracting_apps_section),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = animatedTextPrimary
-            )
-            Spacer(modifier = Modifier.height(5.dp))
-            Text(
-                text = stringResource(R.string.manage_distracting_apps),
-                style = MaterialTheme.typography.bodySmall,
-                color = animatedTextSecondary
-            )
-            Spacer(modifier = Modifier.height(10.dp))
 
-            val distractingApps by viewModel.distractingApps.collectAsState()
-            var installedApps by remember { mutableStateOf<List<com.goldenminute.catalyst.ui.AppInfo>>(emptyList()) }
-            val context = androidx.compose.ui.platform.LocalContext.current
 
-            LaunchedEffect(Unit) {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val pm = context.packageManager
-                    val intent = android.content.Intent(android.content.Intent.ACTION_MAIN, null).apply {
-                        addCategory(android.content.Intent.CATEGORY_LAUNCHER)
-                    }
-                    val apps = pm.queryIntentActivities(intent, 0).map { resolveInfo ->
-                        val iconDrawable = resolveInfo.loadIcon(pm)
-                        val bitmap = if (iconDrawable is android.graphics.drawable.BitmapDrawable) {
-                            iconDrawable.bitmap
-                        } else if (iconDrawable.intrinsicWidth > 0 && iconDrawable.intrinsicHeight > 0) {
-                            val bmp = android.graphics.Bitmap.createBitmap(
-                                iconDrawable.intrinsicWidth, 
-                                iconDrawable.intrinsicHeight, 
-                                android.graphics.Bitmap.Config.ARGB_8888
-                            )
-                            val canvas = android.graphics.Canvas(bmp)
-                            iconDrawable.setBounds(0, 0, canvas.width, canvas.height)
-                            iconDrawable.draw(canvas)
-                            bmp
-                        } else null
-                        
-                        com.goldenminute.catalyst.ui.AppInfo(
-                            resolveInfo.loadLabel(pm).toString(), 
-                            resolveInfo.activityInfo.packageName, 
-                            bitmap?.asImageBitmap()
-                        )
-                    }.distinctBy { it.packageName }.sortedBy { it.name.lowercase() }
-                    installedApps = apps
-                }
-            }
-
-            var showAppSelector by remember { mutableStateOf(false) }
-
-            Button(
-                onClick = { showAppSelector = true },
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SlateDark),
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, animatedBorderColor)
-            ) {
-                Text(text = stringResource(R.string.distracting_apps_section), color = animatedTextPrimary, fontWeight = FontWeight.Bold)
-            }
-
-            if (showAppSelector) {
-                AppDialog(onDismissRequest = { showAppSelector = false }) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 400.dp, max = 500.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(stringResource(R.string.distracting_apps_section), color = TextPrimary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            LazyColumn(modifier = Modifier.weight(1f)) {
-                                items(installedApps) { app ->
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth().clickable {
-                                            val current = distractingApps.toMutableSet()
-                                            if (current.contains(app.packageName)) {
-                                                current.remove(app.packageName)
-                                            } else {
-                                                current.add(app.packageName)
-                                            }
-                                            viewModel.setDistractingApps(current)
-                                        }.padding(vertical = 8.dp)
-                                    ) {
-                                        Checkbox(
-                                            checked = distractingApps.contains(app.packageName),
-                                            onCheckedChange = { chk ->
-                                                val current = distractingApps.toMutableSet()
-                                                if (chk) current.add(app.packageName) else current.remove(app.packageName)
-                                                viewModel.setDistractingApps(current)
-                                            },
-                                            colors = CheckboxDefaults.colors(checkedColor = animatedPrimaryColor)
-                                        )
-                                        
-                                        if (app.icon != null) {
-                                            androidx.compose.foundation.Image(
-                                                bitmap = app.icon,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(32.dp).padding(end = 8.dp)
-                                            )
-                                        } else {
-                                            Spacer(modifier = Modifier.size(32.dp).padding(end = 8.dp))
-                                        }
-                                        
-                                        Text(app.name, color = TextPrimary, maxLines = 1)
-                                    }
-                                }
-                            }
-                            
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                TextButton(onClick = { showAppSelector = false }) {
-                                    Text(stringResource(R.string.ok), color = animatedPrimaryColor)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            val doomscrollingAlertEnabled by viewModel.doomscrollingAlertEnabled.collectAsState()
-            val totalDoomscrollVideos by viewModel.totalDoomscrollVideosCount.collectAsState()
-            val totalDoomscrollDurationMs by viewModel.totalDoomscrollDurationMs.collectAsState()
-            val isPersian = java.util.Locale.getDefault().language == "fa"
-
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        viewModel.setDoomscrollingAlertEnabled(!doomscrollingAlertEnabled)
-                    },
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = SlateDark),
-                border = BorderStroke(1.dp, animatedBorderColor)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 12.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.doomscrolling_alert_title),
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = animatedTextPrimary
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = stringResource(R.string.doomscrolling_alert_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = animatedTextSecondary
-                            )
-                        }
-                        Switch(
-                            checked = doomscrollingAlertEnabled,
-                            onCheckedChange = { viewModel.setDoomscrollingAlertEnabled(it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = animatedPrimaryColor
-                            )
-                        )
-                    }
-
-                    if (totalDoomscrollVideos > 0) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = SlateLight.copy(alpha = 0.5f),
-                            border = BorderStroke(1.dp, animatedBorderColor.copy(alpha = 0.4f))
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                val formattedTime = formatDurationShort(totalDoomscrollDurationMs, isPersian)
-                                Text(
-                                    text = stringResource(R.string.doomscrolling_stats_summary, totalDoomscrollVideos, formattedTime),
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                                    color = animatedPrimaryColor
-                                )
-                                Text(
-                                    text = stringResource(R.string.tab_insights),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = animatedTextSecondary
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(30.dp))
 
             // Data / Backup Section
             Text(
@@ -858,6 +496,185 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(30.dp))
 
+            // NFC Card Data Transfer Section
+            com.goldenminute.catalyst.ui.nfc.NfcCardSettingsSection(viewModel = viewModel)
+
+            Spacer(modifier = Modifier.height(30.dp))
+
+            // Power Button Quick Access Section
+            PowerButtonShortcutSettingsSection(viewModel = viewModel)
+
+            Spacer(modifier = Modifier.height(30.dp))
+
+            // Instagram Doomscrolling Alert Section
+            val doomscrollingAlertEnabled by viewModel.doomscrollingAlertEnabled.collectAsState()
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Insights,
+                        contentDescription = null,
+                        tint = animatedPrimaryColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.doomscrolling_settings_title),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = animatedTextPrimary
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.doomscrolling_settings_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = animatedTextSecondary
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(SlateDark)
+                        .border(BorderStroke(1.dp, animatedBorderColor), RoundedCornerShape(14.dp))
+                        .clickable { viewModel.setDoomscrollingAlertEnabled(!doomscrollingAlertEnabled) }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.doomscrolling_alert_title),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = animatedTextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = stringResource(R.string.doomscrolling_alert_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = animatedTextSecondary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Switch(
+                        checked = doomscrollingAlertEnabled,
+                        onCheckedChange = { viewModel.setDoomscrollingAlertEnabled(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = animatedPrimaryColor,
+                            checkedTrackColor = animatedPrimaryColor.copy(alpha = 0.3f),
+                            uncheckedThumbColor = animatedTextSecondary,
+                            uncheckedTrackColor = SlateDark
+                        )
+                    )
+                }
+
+                // Permission Warning 1: Accessibility Service (Essential for detecting Instagram & Reels)
+                if (doomscrollingAlertEnabled && !isAccessibilityRunning) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = PriorityMedium.copy(alpha = 0.08f),
+                        border = BorderStroke(1.dp, PriorityMedium.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = PriorityMedium,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = stringResource(R.string.perm_accessibility_title),
+                                    color = animatedTextPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = stringResource(R.string.accessibility_service_description_dialog),
+                                color = animatedTextSecondary,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = { openAccessibilitySettings(context) },
+                                colors = ButtonDefaults.buttonColors(containerColor = PriorityMedium.copy(alpha = 0.25f)),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, PriorityMedium.copy(alpha = 0.7f)),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.power_shortcut_enable_accessibility),
+                                    color = PriorityMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Permission Warning 2: Display Over Other Apps (Essential for overlay dialog)
+                if (doomscrollingAlertEnabled && !hasOverlayPermission) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = PriorityMedium.copy(alpha = 0.08f),
+                        border = BorderStroke(1.dp, PriorityMedium.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = PriorityMedium,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = stringResource(R.string.perm_overlay_title),
+                                    color = animatedTextPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = stringResource(R.string.permission_overlay_required),
+                                color = animatedTextSecondary,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = { openOverlaySettings(context) },
+                                colors = ButtonDefaults.buttonColors(containerColor = PriorityMedium.copy(alpha = 0.25f)),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, PriorityMedium.copy(alpha = 0.7f)),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.power_shortcut_grant_permission),
+                                    color = PriorityMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(30.dp))
+
             // Language Section
             Text(
                 text = stringResource(R.string.language_section),
@@ -1064,11 +881,23 @@ fun SettingsScreen(
                                 
                                 
                                     if (themes.size > 1) {
-                                        IconButton(
-                                            onClick = { themeToDelete = themeId },
-                                            modifier = Modifier.align(Alignment.TopEnd).size(24.dp)
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.TopEnd)
+                                                .padding(6.dp)
+                                                .size(26.dp)
+                                                .clip(CircleShape)
+                                                .background(SlateLight.copy(alpha = 0.85f))
+                                                .border(1.dp, PriorityHigh.copy(alpha = 0.4f), CircleShape)
+                                                .clickable { themeToDelete = themeId },
+                                            contentAlignment = Alignment.Center
                                         ) {
-                                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.delete_button), modifier = Modifier.size(16.dp), tint = animatedTextSecondary)
+                                            Icon(
+                                                imageVector = Icons.Default.DeleteOutline,
+                                                contentDescription = stringResource(R.string.delete_button),
+                                                modifier = Modifier.size(15.dp),
+                                                tint = PriorityHigh
+                                            )
                                         }
                                     }
                                 }
@@ -1262,6 +1091,21 @@ fun SettingsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                            .background(PriorityHigh.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = null,
+                            tint = PriorityHigh,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
                     Text(
                         text = stringResource(R.string.delete_theme_title),
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
@@ -1279,7 +1123,7 @@ fun SettingsScreen(
                     ) {
                         OutlinedButton(
                             onClick = { themeToDelete = null },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).height(46.dp),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = animatedTextPrimary),
                             shape = RoundedCornerShape(12.dp)
                         ) {
@@ -1290,10 +1134,16 @@ fun SettingsScreen(
                                 viewModel.deleteTheme(themeIdToDelete)
                                 themeToDelete = null
                             },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).height(46.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = PriorityHigh),
                             shape = RoundedCornerShape(12.dp)
                         ) {
+                            Icon(
+                                Icons.Default.DeleteOutline,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(stringResource(R.string.delete_button), fontWeight = FontWeight.Bold)
                         }
                     }
@@ -1390,4 +1240,291 @@ fun HsvColorPicker(
         )
     }
 }
+
+@Composable
+private fun CustomPromptCard(
+    title: String,
+    description: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    currentPrompt: String,
+    defaultPrompt: String,
+    availableVariables: List<String>,
+    animatedPrimaryColor: Color,
+    animatedBorderColor: Color,
+    animatedTextPrimary: Color,
+    animatedTextSecondary: Color,
+    onSavePrompt: (String) -> Unit
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+    var promptInput by remember(currentPrompt) { mutableStateOf(currentPrompt) }
+    val isCustom = currentPrompt.trim() != defaultPrompt.trim()
+    val isModified = promptInput != currentPrompt
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val savedToastMsg = stringResource(R.string.prompt_saved)
+    val resetToastMsg = stringResource(R.string.prompt_reset)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .border(
+                1.dp,
+                if (isCustom) animatedPrimaryColor.copy(alpha = 0.45f) else animatedBorderColor,
+                RoundedCornerShape(16.dp)
+            ),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = SlateDark
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // Header: Clickable to toggle expand
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { isExpanded = !isExpanded },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Icon
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(animatedPrimaryColor.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = animatedPrimaryColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = animatedTextPrimary
+                        )
+
+                        // Status pill badge
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (isCustom) animatedPrimaryColor.copy(alpha = 0.18f)
+                                    else SlateLight.copy(alpha = 0.6f)
+                                )
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = if (isCustom) stringResource(R.string.prompt_status_custom) else stringResource(R.string.prompt_status_default),
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = if (isCustom) animatedPrimaryColor else animatedTextSecondary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(3.dp))
+
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = animatedTextSecondary,
+                        maxLines = if (isExpanded) 3 else 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = animatedTextSecondary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            // Expanded Editor
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp)
+                ) {
+                    // Variable helper chips
+                    Text(
+                        text = stringResource(R.string.prompt_variables_title),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = animatedTextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        availableVariables.forEach { variable ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = SlateLight.copy(alpha = 0.7f),
+                                border = BorderStroke(1.dp, animatedPrimaryColor.copy(alpha = 0.3f)),
+                                modifier = Modifier.clickable {
+                                    promptInput = if (promptInput.endsWith(" ") || promptInput.endsWith("\n") || promptInput.isEmpty()) {
+                                        promptInput + variable
+                                    } else {
+                                        promptInput + " " + variable
+                                    }
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = "+",
+                                        color = animatedPrimaryColor,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                    )
+                                    Text(
+                                        text = variable,
+                                        color = animatedTextPrimary,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Text Editor
+                    OutlinedTextField(
+                        value = promptInput,
+                        onValueChange = { promptInput = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 140.dp, max = 280.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = animatedPrimaryColor,
+                            unfocusedBorderColor = animatedBorderColor,
+                            focusedTextColor = animatedTextPrimary,
+                            unfocusedTextColor = animatedTextPrimary,
+                            focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.2f)
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Reset button
+                        if (isCustom || promptInput != defaultPrompt) {
+                            TextButton(
+                                onClick = {
+                                    promptInput = defaultPrompt
+                                    onSavePrompt(defaultPrompt)
+                                    android.widget.Toast.makeText(context, resetToastMsg, android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.textButtonColors(contentColor = animatedTextSecondary),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = stringResource(R.string.reset_to_default_btn),
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (isModified) {
+                                OutlinedButton(
+                                    onClick = {
+                                        promptInput = currentPrompt
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = animatedTextPrimary),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.cancel),
+                                        fontWeight = FontWeight.Medium,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    onSavePrompt(promptInput)
+                                    android.widget.Toast.makeText(context, savedToastMsg, android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = animatedPrimaryColor,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                enabled = isModified,
+                                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = stringResource(R.string.save_key),
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 

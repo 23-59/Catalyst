@@ -153,7 +153,16 @@ fun getSectionDisplayName(
 ): String {
     val localizedSection = SmartTrackerService.localizeSectionName(section, isPersian)
     if (packageName.isNullOrBlank()) return localizedSection
-    val appName = SmartTrackerService.getAppDisplayName(packageName, context, isPersian)
+    val pkgs = packageName.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    val matchingPkg = if (pkgs.size > 1) {
+        pkgs.find { pkg ->
+            SmartTrackerService.KNOWN_APP_SECTIONS[pkg]?.any { it.equals(section, ignoreCase = true) } == true
+        } ?: pkgs.firstOrNull() ?: ""
+    } else {
+        pkgs.firstOrNull() ?: ""
+    }
+    if (matchingPkg.isBlank()) return localizedSection
+    val appName = SmartTrackerService.getAppDisplayName(matchingPkg, context, isPersian)
     return if (appName.isNotBlank()) "$appName • $localizedSection" else localizedSection
 }
 

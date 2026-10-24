@@ -1317,20 +1317,58 @@ fun DoomscrollingInsightsCard(
                         enter = expandVertically() + fadeIn(),
                         exit = shrinkVertically() + fadeOut()
                     ) {
+                        val context = LocalContext.current
+                        val todayLabel = stringResource(R.string.period_today)
+                        val yesterdayLabel = stringResource(R.string.period_yesterday)
+                        val dayTotalLabel = stringResource(R.string.doomscrolling_day_total)
+
+                        val groupedByDay = remember(records, isPersian) {
+                            val sorted = records.sortedByDescending { it.timestamp }
+                            val now = Calendar.getInstance()
+                            val todayStart = Calendar.getInstance().apply {
+                                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+                                set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                            }.timeInMillis
+                            val yesterdayStart = todayStart - 24 * 60 * 60 * 1000L
+
+                            sorted.groupBy { record ->
+                                when {
+                                    record.timestamp >= todayStart -> todayLabel
+                                    record.timestamp >= yesterdayStart -> yesterdayLabel
+                                    else -> {
+                                        if (isPersian) {
+                                            val cal = Calendar.getInstance().apply { timeInMillis = record.timestamp }
+                                            val jd = JalaliCalendarHelper.gregorianToJalali(
+                                                cal.get(Calendar.YEAR),
+                                                cal.get(Calendar.MONTH) + 1,
+                                                cal.get(Calendar.DAY_OF_MONTH)
+                                            )
+                                            val monthName = JalaliCalendarHelper.JalaliDate.getMonthName(jd.month)
+                                            JalaliCalendarHelper.toPersianDigits("${jd.day}") + " $monthName"
+                                        } else {
+                                            SimpleDateFormat("MMM d", Locale.getDefault()).format(Date(record.timestamp))
+                                        }
+                                    }
+                                }
+                            }.toList()
+                        }
+
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 14.dp, vertical = 6.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            val timeFormat = remember { SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()) }
-                            val sortedRecords = remember(records) { records.sortedByDescending { it.timestamp } }
-                            sortedRecords.forEachIndexed { index, record ->
+                            groupedByDay.forEach { (dayLabel, dayRecords) ->
+                                val dayTotalMs = dayRecords.sumOf { it.durationMs }
+                                val sessionsCount = dayRecords.size
+                                val sessionsCountStr = stringResource(R.string.doomscrolling_sessions_count, sessionsCount)
+
+                                // Day header
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(SlateDark.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        .padding(vertical = 2.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
@@ -1338,33 +1376,84 @@ fun DoomscrollingInsightsCard(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        val reelNumber = sortedRecords.size - index
-                                        val numberStr = if (isPersian) "#${JalaliCalendarHelper.toPersianDigits(reelNumber.toString())}" else "#$reelNumber"
-                                        Text(
-                                            text = numberStr,
-                                            color = NeonPurple,
-                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .background(NeonPurple, CircleShape)
                                         )
-                                        val dateStr = timeFormat.format(Date(record.timestamp))
-                                        val formattedDate = if (isPersian) JalaliCalendarHelper.toPersianDigits(dateStr) else dateStr
                                         Text(
-                                            text = formattedDate,
+                                            text = dayLabel,
+                                            color = TextPrimary,
+                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                                        )
+                                        Text(
+                                            text = "·",
                                             color = TextSecondary,
-                                            style = MaterialTheme.typography.bodySmall
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                        Text(
+                                            text = if (isPersian) JalaliCalendarHelper.toPersianDigits(sessionsCountStr) else sessionsCountStr,
+                                            color = TextSecondary,
+                                            style = MaterialTheme.typography.labelSmall
                                         )
                                     }
-
                                     Surface(
                                         shape = RoundedCornerShape(6.dp),
-                                        color = PriorityHigh.copy(alpha = 0.15f),
-                                        border = BorderStroke(1.dp, PriorityHigh.copy(alpha = 0.3f))
+                                        color = NeonPurple.copy(alpha = 0.12f),
+                                        border = BorderStroke(1.dp, NeonPurple.copy(alpha = 0.25f))
                                     ) {
                                         Text(
-                                            text = formatDuration(record.durationMs, isPersian),
-                                            color = PriorityHigh,
+                                            text = formatDuration(dayTotalMs, isPersian),
+                                            color = NeonPurple,
                                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                         )
+                                    }
+                                }
+
+                                // Individual records within the day
+                                val timeOnlyFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+                                dayRecords.forEachIndexed { index, record ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(SlateDark.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            val sessionNumber = dayRecords.size - index
+                                            val numberStr = if (isPersian) "#${JalaliCalendarHelper.toPersianDigits(sessionNumber.toString())}" else "#$sessionNumber"
+                                            Text(
+                                                text = numberStr,
+                                                color = NeonPurple,
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                            )
+                                            val timeStr = timeOnlyFormat.format(Date(record.timestamp))
+                                            val formattedTime = if (isPersian) JalaliCalendarHelper.toPersianDigits(timeStr) else timeStr
+                                            Text(
+                                                text = formattedTime,
+                                                color = TextSecondary,
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        }
+
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = PriorityHigh.copy(alpha = 0.15f),
+                                            border = BorderStroke(1.dp, PriorityHigh.copy(alpha = 0.3f))
+                                        ) {
+                                            Text(
+                                                text = formatDuration(record.durationMs, isPersian),
+                                                color = PriorityHigh,
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }

@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,7 +33,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
@@ -85,63 +83,13 @@ fun PermissionsSetupScreen(
     val isAccessibilityGranted = remember(refreshCounter) { checkAccessibilityService(context) }
     val isBatteryIgnored = remember(refreshCounter) { checkBatteryOptimization(context) }
 
-    // Multi-permission runtime launcher
-    var isSequentialFlowActive by remember { mutableStateOf(false) }
+    val allGranted = isNotificationsGranted && isMicGranted && isExactAlarmGranted && isOverlayGranted && isAccessibilityGranted && isBatteryIgnored
 
     val runtimeLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) {
         refreshCounter++
-        if (isSequentialFlowActive) {
-            // Move to next step in sequential flow
-            triggerNextUngrantedSpecialPermission(
-                context = context,
-                isExactAlarm = checkExactAlarmPermission(context),
-                isOverlay = checkOverlayPermission(context),
-                isAccessibility = checkAccessibilityService(context),
-                isBattery = checkBatteryOptimization(context)
-            )
-        }
     }
-
-    fun requestRuntimePermissions() {
-        val permissionsToRequest = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !isNotificationsGranted) {
-            permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        if (!isMicGranted) {
-            permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
-        }
-        if (permissionsToRequest.isNotEmpty()) {
-            runtimeLauncher.launch(permissionsToRequest.toTypedArray())
-        } else if (isSequentialFlowActive) {
-            triggerNextUngrantedSpecialPermission(
-                context = context,
-                isExactAlarm = isExactAlarmGranted,
-                isOverlay = isOverlayGranted,
-                isAccessibility = isAccessibilityGranted,
-                isBattery = isBatteryIgnored
-            )
-        }
-    }
-
-    fun startSequentialGrantFlow() {
-        isSequentialFlowActive = true
-        val hasUngrantedRuntime = (!isNotificationsGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) || !isMicGranted
-        if (hasUngrantedRuntime) {
-            requestRuntimePermissions()
-        } else {
-            triggerNextUngrantedSpecialPermission(
-                context = context,
-                isExactAlarm = isExactAlarmGranted,
-                isOverlay = isOverlayGranted,
-                isAccessibility = isAccessibilityGranted,
-                isBattery = isBatteryIgnored
-            )
-        }
-    }
-
-    val allGranted = isNotificationsGranted && isMicGranted && isExactAlarmGranted && isOverlayGranted && isAccessibilityGranted && isBatteryIgnored
 
     val permissionItems = remember(
         isNotificationsGranted,
@@ -286,64 +234,56 @@ fun PermissionsSetupScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // Bottom CTA Button
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 14.dp),
-                color = Color.Transparent
+            // Bottom CTA Button: appears when all permissions are granted
+            AnimatedVisibility(
+                visible = allGranted,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
             ) {
-                Button(
-                    onClick = {
-                        if (allGranted) {
-                            onFinished()
-                        } else {
-                            startSequentialGrantFlow()
-                        }
-                    },
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(58.dp),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Transparent,
-                        contentColor = Color.White
-                    ),
-                    contentPadding = PaddingValues(0.dp)
+                        .padding(vertical = 14.dp),
+                    color = Color.Transparent
                 ) {
-                    Box(
+                    Button(
+                        onClick = onFinished,
                         modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                if (allGranted) {
-                                    Brush.horizontalGradient(listOf(NeonCyan, Color(0xFF10B981)))
-                                } else {
-                                    Brush.horizontalGradient(listOf(NeonCyan, NeonPurple))
-                                }
-                            ),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .height(58.dp),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Transparent,
+                            contentColor = Color.White
+                        ),
+                        contentPadding = PaddingValues(0.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.horizontalGradient(listOf(NeonCyan, Color(0xFF10B981)))
+                                ),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = if (allGranted) {
-                                    stringResource(R.string.continue_to_app)
-                                } else {
-                                    stringResource(R.string.grant_all_permissions)
-                                },
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Icon(
-                                imageVector = if (allGranted) Icons.Default.CheckCircle else Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                                tint = Color.White
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.continue_to_app),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = Color.White
+                                )
+                            }
                         }
                     }
                 }
@@ -527,21 +467,6 @@ fun checkBatteryOptimization(context: Context): Boolean {
     return pm.isIgnoringBatteryOptimizations(context.packageName)
 }
 
-fun triggerNextUngrantedSpecialPermission(
-    context: Context,
-    isExactAlarm: Boolean,
-    isOverlay: Boolean,
-    isAccessibility: Boolean,
-    isBattery: Boolean
-) {
-    when {
-        !isOverlay -> openOverlaySettings(context)
-        !isAccessibility -> openAccessibilitySettings(context)
-        !isExactAlarm -> openExactAlarmSettings(context)
-        !isBattery -> openBatteryOptimizationSettings(context)
-    }
-}
-
 fun openOverlaySettings(context: Context) {
     try {
         val intent = Intent(
@@ -624,4 +549,14 @@ fun openAppNotificationSettings(context: Context) {
             context.startActivity(intent)
         } catch (_: Exception) {}
     }
+}
+
+fun openAppDetailsSettings(context: Context) {
+    try {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:${context.packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    } catch (_: Exception) {}
 }

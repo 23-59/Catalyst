@@ -2,9 +2,12 @@ package com.goldenminute.catalyst.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.app.ActivityOptions
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.util.Log
+import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.goldenminute.catalyst.data.TodoDatabase
@@ -41,19 +44,11 @@ class SmartTrackerService : AccessibilityService() {
         )
         
         var activeDistractingPackages: Set<String> = DEFAULT_DISTRACTING_PACKAGES
-        var isDoomscrollingAlertEnabled: Boolean = false
+        var isDoomscrollingAlertEnabled: Boolean = true
 
         // Detectable sections per known app — used by the UI to show section pickers
         val KNOWN_APP_SECTIONS: Map<String, List<String>> = mapOf(
-            "com.instagram.android" to listOf("Home", "Explore", "Reels", "Messages", "Profile", "Create", "Activity"),
-            "com.zhiliaoapp.musically" to listOf("ForYou", "Discover", "Inbox", "Profile"),
-            "com.ss.android.ugc.trill" to listOf("ForYou", "Discover", "Inbox", "Profile"),
-            "com.twitter.android" to listOf("Home", "Explore", "Notifications", "Messages", "Communities"),
-            "com.google.android.youtube" to listOf("Home", "Shorts", "Subscriptions", "Library"),
-            "com.reddit.frontpage" to listOf("Home", "Popular", "Create", "Chat", "Profile"),
-            "com.snapchat.android" to listOf("Camera", "Chat", "Discover", "Spotlight", "Map"),
-            "com.facebook.katana" to listOf("Home", "Watch", "Reels", "Marketplace", "Notifications", "Menu"),
-            "com.pinterest" to listOf("Home", "Explore"),
+            "com.instagram.android" to listOf("Home", "Explore", "Reels", "Messages", "Profile", "Create", "Activity")
         )
 
         /**
@@ -235,8 +230,16 @@ class SmartTrackerService : AccessibilityService() {
 
         fun checkIsOverlayShowing(): Boolean {
             if (isOverlayShowing) {
-                // Failsafe: if overlay has been marked showing for >40s without dismissal, auto-reset
-                if (System.currentTimeMillis() - overlayShownTime > 40_000L) {
+                // If the overlay activity is definitely not active/showing anymore, auto-reset
+                if (!com.goldenminute.catalyst.ui.MindfulnessOverlayActivity.isShowing()) {
+                    if (System.currentTimeMillis() - overlayShownTime > 1500L) {
+                        isOverlayShowing = false
+                        overlayShownTime = 0L
+                        return false
+                    }
+                }
+                // Failsafe: if overlay has been marked showing for >15s without dismissal, auto-reset
+                if (System.currentTimeMillis() - overlayShownTime > 15_000L) {
                     isOverlayShowing = false
                     overlayShownTime = 0L
                     return false
@@ -250,18 +253,195 @@ class SmartTrackerService : AccessibilityService() {
         @Volatile var lastInstagramReelsHeaderVisible: Boolean? = null
         @Volatile var lastReelsDoomscrollTriggerTime: Long = 0L
         @Volatile var lastReelSignature: String = ""
+        @Volatile var activeReelSignature: String = ""
+        @Volatile var lastDialogReelSignature: String = ""
+        @Volatile var lastDialogReelCounter: Long = 0L
+        @Volatile var lastReelScrollTriggerTime: Long = 0L
+        @Volatile var lastReelScrollEventTime: Long = 0L
+        @Volatile var pendingDoomscrollTargetReel: String = ""
+        @Volatile var reelScrollCounter: Long = 0L
+        @Volatile var currentAppLanguage: String = "en"
+
+        @Volatile var overlayDismissedTime = 0L
+        @Volatile var ignoredReelSignature: String = ""
+        @Volatile var ignoredReelCounter: Long = 0L
+        @Volatile var isInspirationActiveForCurrentReel: Boolean = false
+        @Volatile var ignoredReelTimestamp: Long = 0L
+        @Volatile var lastInspirationMarkedTime: Long = 0L
+        @Volatile var lastInspirationReelCounter: Long = 0L
+
+        val shownDialogReelSignatures: MutableSet<String> = java.util.Collections.synchronizedSet(LinkedHashSet())
+        val inspiredReelSignatures: MutableSet<String> = java.util.Collections.synchronizedSet(LinkedHashSet())
+
+        fun recordShownReel(signature: String) {
+            if (signature.isEmpty()) return
+            shownDialogReelSignatures.add(signature)
+            if (shownDialogReelSignatures.size > 100) {
+                val iter = shownDialogReelSignatures.iterator()
+                if (iter.hasNext()) {
+                    iter.next()
+                    iter.remove()
+                }
+            }
+        }
+
+        fun recordInspiredReel(signature: String) {
+            if (signature.isEmpty()) return
+            inspiredReelSignatures.add(signature)
+            if (inspiredReelSignatures.size > 100) {
+                val iter = inspiredReelSignatures.iterator()
+                if (iter.hasNext()) {
+                    iter.next()
+                    iter.remove()
+                }
+            }
+            recordShownReel(signature)
+        }
+
+        private val GENERIC_INSTAGRAM_WORDS = setOf(
+            "original audio", "صدای اصلی", "use audio", "استفاده از صدا",
+            "original sound", "صدای پیش‌فرض", "audio", "video", "صدا", "ویدیو",
+            "reels", "reel", "ریلز", "follow", "following", "دنبال کردن", "دنبال می‌کنید",
+            "like", "likes", "liked", "پسندیدن", "پسندیدید", "لایک",
+            "comment", "comments", "دیدگاه", "دیدگاه‌ها", "نظر", "نظرات", "کامنت", "add comment",
+            "share", "اشتراک‌گذاری", "هم‌رسانی", "ارسال", "send",
+            "save", "saved", "ذخیره", "ذخیره‌شده", "remix", "ریمیکس",
+            "sponsored", "تبلیغ", "حمایت‌شده", "suggested for you", "پیشنهاد برای شما",
+            "see translation", "مشاهده ترجمه", "دیدن ترجمه", "more", "بیشتر", "less", "کمتر",
+            "view all", "مشاهده همه", "add a comment", "افزودن دیدگاه", "threads", "تردز",
+            "template", "الگو", "قالب", "watch more", "مشاهده بیشتر", "verified", "تأییدشده",
+            "double", "tap", "play", "pause", "playing", "paused", "دوبار", "ضربه", "بزنید", "پخش", "توقف", "مکث",
+            "repost", "reposted", "reshare", "reshared", "بازنشر",
+            "seekbar", "seek", "slider", "progress", "نوار پیشرفت",
+            "story", "stories", "highlight", "highlights", "استوری", "هایلایت",
+            "grid", "view", "column", "row", "photo", "photos", "شبکه", "نما", "نمای",
+            "seen", "unseen", "unread", "دیده شده", "خوانده",
+            "number", "times", "تعداد", "بار", "post", "posts", "پست",
+            "home", "search", "explore", "message", "messages", "profile", "activity", "direct",
+            "خانه", "جستجو", "کاوش", "پیام", "پیام‌ها", "نمایه", "پروفایل", "فعالیت"
+        )
+
+        fun isSameReel(sig1: String, sig2: String): Boolean {
+            if (sig1.isEmpty() || sig2.isEmpty()) return false
+            if (sig1.equals(sig2, ignoreCase = true)) return true
+
+            // Synthetic IDs like "reel_1" must only match via exact equality
+            val isSig1Synthetic = sig1.startsWith("reel_")
+            val isSig2Synthetic = sig2.startsWith("reel_")
+            if (isSig1Synthetic || isSig2Synthetic) {
+                return false
+            }
+
+            fun extractAuthor(sig: String): String {
+                if (sig.startsWith("author:")) {
+                    return sig.substringAfter("author:").substringBefore("|").trim().lowercase(java.util.Locale.ROOT)
+                }
+                return ""
+            }
+
+            val author1 = extractAuthor(sig1)
+            val author2 = extractAuthor(sig2)
+            if (author1.isNotEmpty() && author2.isNotEmpty() && author1 != author2) {
+                // Different creators means definitely different reels
+                return false
+            }
+
+            fun extractTokens(sig: String): Set<String> {
+                val cleanSig = if (sig.startsWith("author:")) sig.substringAfter("|") else sig
+                return cleanSig.split(Regex("[\\s|\\n\\t\\.,;:!?…()@#]+"))
+                    .map { it.trim().lowercase(java.util.Locale.ROOT).removeSuffix("'s") }
+                    .filter { token ->
+                        token.length >= 3
+                            && !token.matches(Regex("^[0-9.,:\\s]+[kmbKMB]?$"))
+                            && !GENERIC_INSTAGRAM_WORDS.contains(token)
+                    }
+                    .toSet()
+            }
+
+            val tokens1 = extractTokens(sig1)
+            val tokens2 = extractTokens(sig2)
+
+            if (tokens1.isEmpty() || tokens2.isEmpty()) {
+                return false
+            }
+
+            val common = tokens1.intersect(tokens2)
+            if (common.isEmpty()) return false
+
+            // If same author was confirmed:
+            if (author1.isNotEmpty() && author1 == author2) {
+                val minSize = minOf(tokens1.size, tokens2.size)
+                if (minSize <= 2) {
+                    return common.size == minSize
+                }
+                return common.size >= 2
+            }
+
+            // Without confirmed same author:
+            // MUST share at least 3 distinct non-generic tokens and have >= 70% overlap
+            val smallerSize = minOf(tokens1.size, tokens2.size)
+            if (smallerSize < 3) {
+                // Never match disparate reels based on only 1 or 2 isolated words
+                return false
+            }
+
+            val similarity = common.size.toDouble() / smallerSize
+            return common.size >= 3 && similarity >= 0.70
+        }
+
+        fun onReelMarkedInspiration() {
+            val currentReel = activeReelSignature.ifEmpty { lastDialogReelSignature }
+            ignoredReelSignature = currentReel
+            ignoredReelCounter = reelScrollCounter
+            isInspirationActiveForCurrentReel = true
+            ignoredReelTimestamp = System.currentTimeMillis()
+            lastInspirationMarkedTime = System.currentTimeMillis()
+            lastInspirationReelCounter = reelScrollCounter
+            lastDialogReelCounter = reelScrollCounter
+            isCurrentReelMarkedDoomscroll = false
+            overlayDismissedTime = System.currentTimeMillis()
+
+            if (currentReel.isNotEmpty() && !currentReel.startsWith("reel_")) {
+                recordInspiredReel(currentReel)
+            }
+            if (lastDialogReelSignature.isNotEmpty() && !lastDialogReelSignature.startsWith("reel_")) {
+                recordInspiredReel(lastDialogReelSignature)
+            }
+            if (activeReelSignature.isNotEmpty() && !activeReelSignature.startsWith("reel_")) {
+                recordInspiredReel(activeReelSignature)
+            }
+
+            Log.d(TAG, "Reel marked as inspiration: '$ignoredReelSignature' (counter: $ignoredReelCounter). Suppressing alerts for this video.")
+        }
 
         fun onMindfulnessDismissed() {
             isOverlayShowing = false
             overlayShownTime = 0L
-            lastReelsDoomscrollTriggerTime = System.currentTimeMillis()
+            overlayDismissedTime = System.currentTimeMillis()
+            pendingDoomscrollTargetReel = ""
+            lastReelsDoomscrollTriggerTime = 0L
+            if (lastDialogReelSignature.isNotEmpty() && !lastDialogReelSignature.startsWith("reel_")) {
+                recordShownReel(lastDialogReelSignature)
+            }
+            if (activeReelSignature.isNotEmpty() && !activeReelSignature.startsWith("reel_")) {
+                recordShownReel(activeReelSignature)
+            }
         }
 
         // State for tracking time on a Reel marked as doomscrolling
         @Volatile var isCurrentReelMarkedDoomscroll: Boolean = false
         @Volatile var currentReelDoomscrollStartTime: Long = 0L
+        @Volatile var currentSessionDoomscrollWastedMs: Long = 0L
+        @Volatile var hasUserAcknowledgedDoomscrolling: Boolean = false
+
+        fun resetDoomscrollSession() {
+            currentSessionDoomscrollWastedMs = 0L
+            hasUserAcknowledgedDoomscrolling = false
+            Log.d(TAG, "Doomscroll session reset. currentSessionDoomscrollWastedMs = 0")
+        }
 
         fun onDoomscrollingMarked(context: Context, packageName: String) {
+            hasUserAcknowledgedDoomscrolling = true
             isCurrentReelMarkedDoomscroll = true
             currentReelDoomscrollStartTime = System.currentTimeMillis()
             Log.d(TAG, "Reel marked as doomscrolling! Started tracking watch time.")
@@ -275,7 +455,8 @@ class SmartTrackerService : AccessibilityService() {
                 currentReelDoomscrollStartTime = 0L
 
                 if (duration >= 500L) {
-                    Log.d(TAG, "Finalized doomscroll video: duration=${duration}ms")
+                    currentSessionDoomscrollWastedMs += duration
+                    Log.d(TAG, "Finalized doomscroll video: duration=${duration}ms, sessionWasted=${currentSessionDoomscrollWastedMs}ms")
                     CoroutineScope(Dispatchers.IO).launch {
                         try {
                             val db = TodoDatabase.getDatabase(context, this)
@@ -355,7 +536,11 @@ class SmartTrackerService : AccessibilityService() {
             applicationContext.appDataStore.data.collect { prefs ->
                 val apps = prefs[DataStoreKeys.DISTRACTING_APPS]
                 activeDistractingPackages = apps ?: DEFAULT_DISTRACTING_PACKAGES
-                isDoomscrollingAlertEnabled = prefs[DataStoreKeys.DOOMSCROLLING_ALERT_ENABLED] ?: false
+                isDoomscrollingAlertEnabled = prefs[DataStoreKeys.DOOMSCROLLING_ALERT_ENABLED] ?: true
+                currentAppLanguage = prefs[DataStoreKeys.LANGUAGE] ?: if (java.util.Locale.getDefault().language == "fa") "fa" else "en"
+
+                val powerShortcut = prefs[DataStoreKeys.POWER_BUTTON_SHORTCUT_MODE] ?: "none"
+                PowerButtonShortcutManager.applyMode(applicationContext, powerShortcut)
             }
         }
 
@@ -412,7 +597,11 @@ class SmartTrackerService : AccessibilityService() {
     }
 
     private fun isIgnoredTransientPackage(packageName: String): Boolean {
-        if (packageName == "com.goldenminute.catalyst" && checkIsOverlayShowing()) return true
+        if (packageName == "com.goldenminute.catalyst") {
+            if (checkIsOverlayShowing() || System.currentTimeMillis() - overlayDismissedTime < 5000L) {
+                return true
+            }
+        }
         if (packageName == "android" || packageName == "com.android.systemui") return true
         // Keyboards / Input method editors
         if (packageName.contains("inputmethod") ||
@@ -446,78 +635,23 @@ class SmartTrackerService : AccessibilityService() {
 
         if (packageName.contains("instagram")) {
             if (isBottomArea || viewId.contains("tab") || desc.contains("tab") || desc.contains("برگه")) {
-                return when {
-                    desc.contains("reel") || desc.contains("clips") || desc.contains("video") || desc.contains("ریلز") || desc.contains("ویدیو") || (isBottomArea && cx in (screenWidth * 0.20f).toInt()..(screenWidth * 0.40f).toInt()) -> "Reels"
-                    desc.contains("direct") || desc.contains("message") || desc.contains("chat") || desc.contains("پیام") || desc.contains("دایرکت") || (isBottomArea && cx in (screenWidth * 0.40f).toInt()..(screenWidth * 0.60f).toInt()) -> "Messages"
-                    desc.contains("search") || desc.contains("explore") || desc.contains("جستجو") || desc.contains("کاوش") || desc.contains("اکسپلور") || (isBottomArea && cx in (screenWidth * 0.60f).toInt()..(screenWidth * 0.80f).toInt()) -> "Explore"
-                    desc.contains("profile") || desc.contains("پروفایل") || desc.contains("نمایه") || (isBottomArea && cx >= (screenWidth * 0.80f).toInt()) -> "Profile"
-                    desc.contains("home") || desc.contains("feed") || desc.contains("خانه") || (isBottomArea && cx < (screenWidth * 0.20f).toInt()) -> "Home"
-                    else -> null
-                }
-            }
-        } else if (packageName.contains("musically") || packageName.contains("tiktok") || packageName.contains("trill")) {
-            if (isBottomArea || viewId.contains("tab")) {
-                return when {
-                    desc.contains("discover") || desc.contains("search") || desc.contains("جستجو") || (isBottomArea && cx in (screenWidth * 0.20f).toInt()..(screenWidth * 0.40f).toInt()) -> "Discover"
-                    desc.contains("inbox") || desc.contains("notification") || desc.contains("صندوق") || (isBottomArea && cx in (screenWidth * 0.60f).toInt()..(screenWidth * 0.80f).toInt()) -> "Inbox"
-                    desc.contains("profile") || desc.contains("me") || desc.contains("پروفایل") || (isBottomArea && cx >= (screenWidth * 0.80f).toInt()) -> "Profile"
-                    desc.contains("home") || desc.contains("for you") || desc.contains("خانه") || (isBottomArea && cx < (screenWidth * 0.20f).toInt()) -> "ForYou"
-                    else -> null
-                }
-            }
-        } else if (packageName.contains("youtube")) {
-            if (isBottomArea || viewId.contains("pivot") || viewId.contains("tab")) {
-                return when {
-                    desc.contains("short") || desc.contains("شورتز") || (isBottomArea && cx in (screenWidth * 0.25f).toInt()..(screenWidth * 0.50f).toInt()) -> "Shorts"
-                    desc.contains("subscription") || desc.contains("اشتراک") || (isBottomArea && cx in (screenWidth * 0.50f).toInt()..(screenWidth * 0.75f).toInt()) -> "Subscriptions"
-                    desc.contains("library") || desc.contains("you") || desc.contains("کتابخانه") || (isBottomArea && cx >= (screenWidth * 0.75f).toInt()) -> "Library"
-                    desc.contains("home") || desc.contains("خانه") || (isBottomArea && cx < (screenWidth * 0.25f).toInt()) -> "Home"
-                    else -> null
-                }
-            }
-        } else if (packageName.contains("twitter") || packageName.contains("x.android")) {
-            if (isBottomArea || viewId.contains("tab")) {
-                return when {
-                    desc.contains("search") || desc.contains("explore") || desc.contains("جستجو") || (isBottomArea && cx in (screenWidth * 0.20f).toInt()..(screenWidth * 0.40f).toInt()) -> "Explore"
-                    desc.contains("communities") || desc.contains("انجمن") || (isBottomArea && cx in (screenWidth * 0.40f).toInt()..(screenWidth * 0.60f).toInt()) -> "Communities"
-                    desc.contains("notification") || desc.contains("اعلان") || (isBottomArea && cx in (screenWidth * 0.60f).toInt()..(screenWidth * 0.80f).toInt()) -> "Notifications"
-                    desc.contains("message") || desc.contains("dm") || desc.contains("پیام") || (isBottomArea && cx >= (screenWidth * 0.80f).toInt()) -> "Messages"
-                    desc.contains("home") || desc.contains("خانه") || (isBottomArea && cx < (screenWidth * 0.20f).toInt()) -> "Home"
-                    else -> null
-                }
-            }
-        } else if (packageName.contains("reddit")) {
-            if (isBottomArea || viewId.contains("tab")) {
-                return when {
-                    desc.contains("popular") || desc.contains("discover") || (isBottomArea && cx in (screenWidth * 0.20f).toInt()..(screenWidth * 0.40f).toInt()) -> "Popular"
-                    desc.contains("create") || desc.contains("ایجاد") || (isBottomArea && cx in (screenWidth * 0.40f).toInt()..(screenWidth * 0.60f).toInt()) -> "Create"
-                    desc.contains("chat") || desc.contains("inbox") || desc.contains("پیام") || (isBottomArea && cx in (screenWidth * 0.60f).toInt()..(screenWidth * 0.80f).toInt()) -> "Chat"
-                    desc.contains("profile") || desc.contains("پروفایل") || (isBottomArea && cx >= (screenWidth * 0.80f).toInt()) -> "Profile"
-                    desc.contains("home") || desc.contains("خانه") || (isBottomArea && cx < (screenWidth * 0.20f).toInt()) -> "Home"
-                    else -> null
-                }
-            }
-        } else if (packageName.contains("facebook.katana")) {
-            if (isBottomArea || viewId.contains("tab")) {
-                return when {
-                    desc.contains("watch") || desc.contains("video") || desc.contains("ویدیو") -> "Watch"
-                    desc.contains("reel") || desc.contains("ریلز") -> "Reels"
-                    desc.contains("marketplace") || desc.contains("بازار") -> "Marketplace"
-                    desc.contains("notification") || desc.contains("اعلان") -> "Notifications"
-                    desc.contains("menu") || desc.contains("منو") -> "Menu"
-                    desc.contains("home") || desc.contains("feed") || desc.contains("خانه") -> "Home"
-                    else -> null
-                }
-            }
-        } else if (packageName.contains("snapchat")) {
-            if (isBottomArea || viewId.contains("tab")) {
-                return when {
-                    desc.contains("chat") || desc.contains("پیام") -> "Chat"
-                    desc.contains("discover") || desc.contains("stories") || desc.contains("کشف") -> "Discover"
-                    desc.contains("spotlight") || desc.contains("اسپات") -> "Spotlight"
-                    desc.contains("map") || desc.contains("نقشه") -> "Map"
-                    desc.contains("camera") || desc.contains("دوربین") -> "Camera"
-                    else -> null
+                // Content description / viewId matching first (exact & robust)
+                if (desc.contains("create") || desc.contains("camera") || desc.contains("ایجاد") || desc.contains("پست جدید") || desc.contains("دوربین")) return "Create"
+                if (desc.contains("reel") || desc.contains("clips") || desc.contains("ریلز")) return "Reels"
+                if (desc.contains("search") || desc.contains("explore") || desc.contains("جستجو") || desc.contains("کاوش") || desc.contains("اکسپلور")) return "Explore"
+                if (desc.contains("direct") || desc.contains("message") || desc.contains("chat") || desc.contains("پیام") || desc.contains("دایرکت")) return "Messages"
+                if (desc.contains("profile") || desc.contains("پروفایل") || desc.contains("نمایه")) return "Profile"
+                if (desc.contains("home") || desc.contains("feed") || desc.contains("خانه")) return "Home"
+
+                // Fallback to coordinates: 0: Home, 1: Explore, 2: Create, 3: Reels, 4: Profile
+                if (isBottomArea) {
+                    return when {
+                        cx < screenWidth * 0.20f -> "Home"
+                        cx < screenWidth * 0.40f -> "Explore"
+                        cx < screenWidth * 0.60f -> "Create"
+                        cx < screenWidth * 0.80f -> "Reels"
+                        else -> "Profile"
+                    }
                 }
             }
         }
@@ -525,8 +659,76 @@ class SmartTrackerService : AccessibilityService() {
         return null
     }
 
+    private fun isPowerMenuWindow(event: AccessibilityEvent): Boolean {
+        val textList = event.text.map { it.toString().lowercase(java.util.Locale.ROOT) }
+        val hasPowerOff = textList.any { it.contains("power off") || it.contains("خاموش کردن") || it.contains("خاموش شود") }
+        val hasRestart = textList.any { it.contains("restart") || it.contains("راه‌اندازی مجدد") || it.contains("راه اندازی مجدد") }
+        if (hasPowerOff && hasRestart) {
+            return true
+        }
+        val root = try { rootInActiveWindow } catch (e: Exception) { null }
+        if (root != null) {
+            val rootText = extractAllText(root).lowercase(java.util.Locale.ROOT)
+            root.recycle()
+            val rootHasOff = rootText.contains("power off") || rootText.contains("خاموش کردن") || rootText.contains("خاموش شود")
+            val rootHasRestart = rootText.contains("restart") || rootText.contains("راه‌اندازی مجدد") || rootText.contains("راه اندازی مجدد")
+            if (rootHasOff && rootHasRestart) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun extractAllText(node: AccessibilityNodeInfo): String {
+        val sb = StringBuilder()
+        val text = node.text?.toString() ?: ""
+        val desc = node.contentDescription?.toString() ?: ""
+        if (text.isNotEmpty()) sb.append(text).append(" ")
+        if (desc.isNotEmpty()) sb.append(desc).append(" ")
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            sb.append(extractAllText(child))
+            child.recycle()
+        }
+        return sb.toString()
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         val packageName = event.packageName?.toString() ?: return
+
+        // Power menu / Assistant interception for long-press power button shortcut
+        if (PowerButtonShortcutManager.currentMode == "long_press") {
+            // ONLY check TYPE_WINDOW_STATE_CHANGED for explicit dialog appearances
+            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                val className = event.className?.toString() ?: ""
+
+                // 1. Samsung Global Actions power menu
+                if (packageName == "com.samsung.android.globalactions") {
+                    PowerButtonShortcutManager.handleGlobalActionsEvent(this)
+                    return
+                }
+
+                // 2. AOSP / Pixel / other OEM GlobalActions power dialog
+                if (className.contains("GlobalActionsDialog", ignoreCase = true) ||
+                    className.contains("SecGlobalActions", ignoreCase = true)
+                ) {
+                    PowerButtonShortcutManager.handleGlobalActionsEvent(this)
+                    return
+                }
+
+                // 3. Strict content check only if className or package indicates a power / shutdown dialog
+                if (className.contains("PowerDialog", ignoreCase = true) ||
+                    className.contains("ShutdownActivity", ignoreCase = true) ||
+                    className.contains("PowerMenu", ignoreCase = true) ||
+                    packageName.contains("powerkeeper")
+                ) {
+                    if (isPowerMenuWindow(event)) {
+                        PowerButtonShortcutManager.handleGlobalActionsEvent(this)
+                        return
+                    }
+                }
+            }
+        }
 
         // Ignore transient system UI, keyboard, and overlay packages so they don't break tracking or inject "General"
         if (isIgnoredTransientPackage(packageName)) return
@@ -544,11 +746,39 @@ class SmartTrackerService : AccessibilityService() {
                 if (clickedSection != prev) {
                     checkSectionChange(packageName, clickedSection)
                 }
+                // If user clicked away from Reels in Instagram, immediately cancel doomscrolling and dismiss overlay
+                if (packageName == "com.instagram.android" && clickedSection != "Reels") {
+                    pendingDoomscrollJob?.cancel()
+                    pendingDoomscrollJob = null
+                    lastInstagramReelsHeaderVisible = null
+                    lastReelSignature = ""
+                    lastDialogReelSignature = ""
+                    lastDialogReelCounter = 0L
+                    activeReelSignature = ""
+                    // Note: shownDialogReelSignatures and inspiredReelSignatures are preserved
+                    finalizeCurrentDoomscrollVideo(applicationContext)
+                    resetDoomscrollSession()
+                    com.goldenminute.catalyst.ui.MindfulnessOverlayActivity.dismissIfShowing()
+                } else if (packageName == "com.instagram.android" && clickedSection == "Reels") {
+                    val now = System.currentTimeMillis()
+                    if (isDoomscrollingAlertEnabled && !checkIsOverlayShowing() && now - overlayDismissedTime > 1500L) {
+                        reelScrollCounter++
+                        val reelId = "reel_$reelScrollCounter"
+                        lastReelSignature = reelId
+                        Log.i(TAG, "Switched to Reels tab via click: scheduling alert for initial reel ($reelId)")
+                        scheduleDoomscrollingOverlay(packageName, reelId)
+                    }
+                }
                 updateDistractingTracking(packageName, clickedSection)
                 scope.launch {
                     performMindfulnessCheck(packageName, clickedSection)
                 }
             }
+            return
+        }
+
+        // Ignore events from our own transparent overlay activity
+        if (packageName == "com.goldenminute.catalyst") {
             return
         }
 
@@ -559,14 +789,23 @@ class SmartTrackerService : AccessibilityService() {
             flushDistractingSection(lastPackageName)
 
             // Reset accumulated distracting time when LEAVING an app.
-            if (lastPackageName.isNotEmpty()) {
+            if (lastPackageName.isNotEmpty() && lastPackageName != "com.goldenminute.catalyst") {
                 appDistractingTime[lastPackageName] = 0L
                 appDistractingSectionStart.remove(lastPackageName)
-                if (lastPackageName == "com.instagram.android" && !checkIsOverlayShowing()) {
+                if (lastPackageName == "com.instagram.android" && packageName != "com.goldenminute.catalyst") {
                     lastInstagramReelsHeaderVisible = null
                     lastReelSignature = ""
+                    lastDialogReelSignature = ""
+                    lastDialogReelCounter = 0L
+                    activeReelSignature = ""
+                    ignoredReelSignature = ""
+                    ignoredReelCounter = 0L
+                    isInspirationActiveForCurrentReel = false
                     finalizeCurrentDoomscrollVideo(applicationContext)
+                    resetDoomscrollSession()
                     pendingDoomscrollJob?.cancel()
+                    pendingDoomscrollJob = null
+                    com.goldenminute.catalyst.ui.MindfulnessOverlayActivity.dismissIfShowing()
                 }
             }
 
@@ -580,8 +819,32 @@ class SmartTrackerService : AccessibilityService() {
                         val detectedSection = detectSection(rootNode, packageName)
                         currentSection = detectedSection
                         currentSectionStartTime = System.currentTimeMillis()
-                        if (packageName == "com.instagram.android") {
-                            checkInstagramReelsDoomscrolling(rootNode, packageName, isScrollEvent = false)
+                        // On app switch TO Instagram, check if we landed directly in Reels
+                        val now = System.currentTimeMillis()
+                        if (packageName == "com.instagram.android" && detectedSection == "Reels"
+                            && isDoomscrollingAlertEnabled && !checkIsOverlayShowing()
+                            && lastReelSignature.isEmpty()
+                            && now - overlayDismissedTime > 1500L) {
+                            val screenHeight = applicationContext.resources.displayMetrics.heightPixels
+                            val screenWidth = applicationContext.resources.displayMetrics.widthPixels
+                            val sig = extractReelSignature(rootNode, screenWidth, screenHeight)
+                            if (sig.isNotEmpty()) {
+                                if ((isInspirationActiveForCurrentReel && isSameReel(sig, ignoredReelSignature))
+                                    || (lastDialogReelSignature.isNotEmpty() && isSameReel(sig, lastDialogReelSignature))
+                                    || inspiredReelSignatures.any { isSameReel(it, sig) }
+                                    || shownDialogReelSignatures.any { isSameReel(it, sig) }) {
+                                    Log.d(TAG, "Entered Reels (app switch): reel matches inspired/shown reel, skipping alert.")
+                                    return@launch
+                                }
+                                activeReelSignature = sig
+                            } else if (isInspirationActiveForCurrentReel) {
+                                return@launch
+                            }
+                            reelScrollCounter++
+                            val reelId = "reel_$reelScrollCounter"
+                            lastReelSignature = reelId
+                            Log.i(TAG, "Entered Instagram Reels (app switch): scheduling alert for initial reel ($reelId)")
+                            scheduleDoomscrollingOverlay(packageName, reelId)
                         }
                         rootNode.recycle()
                     } else {
@@ -608,8 +871,32 @@ class SmartTrackerService : AccessibilityService() {
                         if (detectedSection != previousSection && detectedSection != "Unknown") {
                             checkSectionChange(packageName, detectedSection)
                         }
-                        if (packageName == "com.instagram.android") {
-                            checkInstagramReelsDoomscrolling(rootNode, packageName, isScrollEvent = false)
+                        // Detect transition INTO Reels section
+                        val nowTransition = System.currentTimeMillis()
+                        if (packageName == "com.instagram.android" && detectedSection == "Reels"
+                            && (previousSection != "Reels" || lastReelSignature.isEmpty())
+                            && isDoomscrollingAlertEnabled && !checkIsOverlayShowing()
+                            && nowTransition - overlayDismissedTime > 1500L) {
+                            val screenHeight = applicationContext.resources.displayMetrics.heightPixels
+                            val screenWidth = applicationContext.resources.displayMetrics.widthPixels
+                            val sig = extractReelSignature(rootNode, screenWidth, screenHeight)
+                            if (sig.isNotEmpty()) {
+                                if ((isInspirationActiveForCurrentReel && isSameReel(sig, ignoredReelSignature))
+                                    || (lastDialogReelSignature.isNotEmpty() && isSameReel(sig, lastDialogReelSignature))
+                                    || inspiredReelSignatures.any { isSameReel(it, sig) }
+                                    || shownDialogReelSignatures.any { isSameReel(it, sig) }) {
+                                    Log.d(TAG, "Navigated to Reels: reel matches inspired/shown reel, skipping alert.")
+                                    return@launch
+                                }
+                                activeReelSignature = sig
+                            } else if (isInspirationActiveForCurrentReel) {
+                                return@launch
+                            }
+                            reelScrollCounter++
+                            val reelId = "reel_$reelScrollCounter"
+                            lastReelSignature = reelId
+                            Log.i(TAG, "Navigated to Reels section: scheduling alert for initial reel ($reelId)")
+                            scheduleDoomscrollingOverlay(packageName, reelId)
                         }
                         rootNode.recycle()
                     }
@@ -617,16 +904,53 @@ class SmartTrackerService : AccessibilityService() {
             }
         }
 
-        // Dedicated fast handler for Instagram Reels scroll events
-        if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED && packageName == "com.instagram.android" && isDoomscrollingAlertEnabled && !checkIsOverlayShowing()) {
-            scope.launch {
-                try {
-                    val root = rootInActiveWindow
-                    if (root != null) {
-                        checkInstagramReelsDoomscrolling(root, packageName, isScrollEvent = true)
-                        root.recycle()
+        // Dedicated fast handler for Instagram Reels scroll events.
+        // This bypasses the isCurrentlyChecking throttle so scroll events are NEVER dropped.
+        // Scroll events are the canonical reel-transition signal — each swipe = new reel.
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED
+            && packageName == "com.instagram.android"
+            && isDoomscrollingAlertEnabled
+            && !checkIsOverlayShowing()) {
+
+            val eventClass = event.className?.toString() ?: ""
+            // Filter out non-swipe scroll sources:
+            // 1. Marquee audio title scrolling text / ticker
+            // 2. Seekbars / progress bars
+            // 3. Horizontal scroll views
+            // 4. EditText typing
+            if (!eventClass.contains("TextView") &&
+                !eventClass.contains("SeekBar") &&
+                !eventClass.contains("ProgressBar") &&
+                !eventClass.contains("HorizontalScrollView") &&
+                !eventClass.contains("EditText")) {
+
+                val now = System.currentTimeMillis()
+                // Ignore scroll events during the overlay dismissal settling period (touch release)
+                if (now - overlayDismissedTime >= 600L && now - lastReelScrollEventTime >= 600L) {
+                    // CRITICAL: Positively verify the active screen is ACTUALLY Instagram Reels!
+                    // Never rely solely on lastSelectedBottomNavSection which bleeds into Notifications/DMs/Profile!
+                    val rootNode = rootInActiveWindow
+                    var isReels = false
+                    if (rootNode != null) {
+                        val screenHeight = applicationContext.resources.displayMetrics.heightPixels
+                        val screenWidth = applicationContext.resources.displayMetrics.widthPixels
+                        isReels = isInstagramReelsScreen(rootNode, screenWidth, screenHeight)
+                        rootNode.recycle()
                     }
-                } catch (_: Exception) {}
+                    if (!isReels && (currentSection == "Reels" || lastSelectedBottomNavSection["com.instagram.android"] == "Reels")) {
+                        isReels = true
+                    }
+
+                    if (isReels) {
+                        lastReelScrollEventTime = now
+                        reelScrollCounter++
+                        finalizeCurrentDoomscrollVideo(applicationContext)
+                        val reelId = "reel_$reelScrollCounter"
+                        lastReelSignature = reelId
+                        Log.i(TAG, "Reels scroll detected (counter=$reelScrollCounter): checking alert for $reelId")
+                        scheduleDoomscrollingOverlay(packageName, reelId)
+                    }
+                }
             }
         }
 
@@ -647,12 +971,30 @@ class SmartTrackerService : AccessibilityService() {
                             }
                             if (detectedSection != previousSection && detectedSection != "Unknown") {
                                 checkSectionChange(packageName, detectedSection)
+                                if (packageName == "com.instagram.android" && detectedSection != "Reels" && !checkIsOverlayShowing()) {
+                                    val now = System.currentTimeMillis()
+                                    if (now - overlayDismissedTime > 1000L) {
+                                        pendingDoomscrollJob?.cancel()
+                                        pendingDoomscrollJob = null
+                                        lastInstagramReelsHeaderVisible = null
+                                        lastReelSignature = ""
+                                        activeReelSignature = ""
+                                        // Preserve shown/inspired reel history across section flickers
+                                        finalizeCurrentDoomscrollVideo(applicationContext)
+                                        resetDoomscrollSession()
+                                        com.goldenminute.catalyst.ui.MindfulnessOverlayActivity.dismissIfShowing()
+                                    }
+                                }
                             }
                             updateDistractingTracking(packageName, detectedSection)
                             performMindfulnessCheck(packageName, detectedSection)
-                            if (packageName == "com.instagram.android") {
-                                val isScroll = (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED)
-                                checkInstagramReelsDoomscrolling(rootNode, packageName, isScrollEvent = isScroll)
+                            if (packageName == "com.instagram.android" && detectedSection == "Reels" && !checkIsOverlayShowing()) {
+                                val screenHeight = applicationContext.resources.displayMetrics.heightPixels
+                                val screenWidth = applicationContext.resources.displayMetrics.widthPixels
+                                val sig = extractReelSignature(rootNode, screenWidth, screenHeight)
+                                if (sig.isNotEmpty()) {
+                                    activeReelSignature = sig
+                                }
                             }
                             rootNode.recycle()
                         }
@@ -688,12 +1030,6 @@ class SmartTrackerService : AccessibilityService() {
 
         return when {
             packageName.contains("instagram") -> "Home"
-            packageName.contains("musically") || packageName.contains("tiktok") || packageName.contains("trill") -> "ForYou"
-            packageName.contains("twitter") || packageName.contains("x.android") -> "Home"
-            packageName.contains("youtube") -> "Home"
-            packageName.contains("reddit") -> "Home"
-            packageName.contains("facebook.katana") -> "Home"
-            packageName.contains("snapchat") -> "Camera"
             else -> "General"
         }
     }
@@ -852,26 +1188,239 @@ class SmartTrackerService : AccessibilityService() {
      * 4. ★ PERSISTENCE: Continues to record for the LAST SELECTED bottom navigation item
      *    until the app finds out the selected item has changed!
      */
+    private fun hasVisibleEditText(node: AccessibilityNodeInfo, maxDepth: Int = 15): Boolean {
+        if (maxDepth <= 0) return false
+        val className = (node.className?.toString() ?: "").lowercase(java.util.Locale.ROOT)
+        if ((node.isEditable || className.contains("edittext")) && node.isFocused) {
+            return true
+        }
+        val viewId = (node.viewIdResourceName ?: "").lowercase(java.util.Locale.ROOT)
+        if (viewId.contains("comment_thread") || viewId.contains("layout_comment_thread") || viewId.contains("comment_composer")) {
+            return true
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            if (hasVisibleEditText(child, maxDepth - 1)) return true
+        }
+        return false
+    }
+
+    private fun isInstagramCreationOrShareScreen(
+        root: AccessibilityNodeInfo,
+        texts: List<String>? = null,
+        allTextIn: String? = null,
+        allDescsIn: String? = null
+    ): Boolean {
+        // Guard: If this is an active Reel or Feed post viewer, it is NEVER a creation screen!
+        if (findNodeByViewIdContains(root, "clips_author_username") != null ||
+            findNodeByViewIdContains(root, "clips_viewer") != null ||
+            (findNodeByViewIdContains(root, "like_button") != null && findNodeByViewIdContains(root, "comment_button") != null)) {
+            return false
+        }
+
+        // Guard: If already in Reels section, do not falsely flag normal reel UI as creation
+        val isReelsSection = lastSelectedBottomNavSection["com.instagram.android"] == "Reels"
+
+        // 1. Check for interactive text editing (captions, search, comments)
+        if (hasVisibleEditText(root)) {
+            return true
+        }
+
+        // 2. Check for characteristic view IDs in Instagram creation / camera / editor / share sheets
+        val creationViewIds = listOf(
+            "cam_shutter", "camera_switch", "camera_roll", "shutter_button",
+            "dial_picker", "capture_mode", "quick_capture", "camera_button",
+            "camera_stub", "layout_camera",
+            "gallery_grid", "media_picker", "album_filter", "gallery_recycler",
+            "gallery_container", "gallery_folder", "gallery_title_container",
+            "clips_editor", "clips_timeline", "video_timeline", "trim_editor",
+            "clips_audio_mix_view", "text_tool", "sticker_tool",
+            "filter_tool", "draw_tool", "story_sticker_container",
+            "photo_view", "trim_handle", "voiceover", "audio_filter",
+            "caption_text_view", "cover_photo_preview", "share_sheet",
+            "share_footer", "clips_share", "metadata_share", "share_to_feed",
+            "tag_people", "tag_users", "add_location", "advanced_settings"
+        )
+        for (idPart in creationViewIds) {
+            if (findNodeByViewIdContains(root, idPart) != null) {
+                return true
+            }
+        }
+
+        // 3. Texts and Content Descriptions analysis
+        val visibleTexts = texts?.toMutableList() ?: mutableListOf<String>().also {
+            collectVisibleTexts(root, it, maxDepth = 25, maxNodes = 400)
+        }
+        val allText = allTextIn ?: visibleTexts.joinToString(" ").lowercase(java.util.Locale.ROOT)
+        val allDescs = allDescsIn ?: run {
+            val descs = mutableListOf<String>()
+            collectContentDescriptions(root, descs, maxDepth = 25, maxNodes = 400)
+            descs.joinToString(" ").lowercase(java.util.Locale.ROOT)
+        }
+
+        // Camera Shutter / Capture indicators
+        if (allDescs.contains("camera shutter") || allDescs.contains("shutter") || allDescs.contains("شاتر") ||
+            allDescs.contains("عکس‌برداری") || allDescs.contains("switch camera") || allDescs.contains("تغییر دوربین")) {
+            return true
+        }
+
+        if (isReelsSection) {
+            // Normal reels viewer content shouldn't be treated as creation
+            return false
+        }
+
+        // Posting / Details / Share screens
+        val shareIndicators = listOf(
+            "new reel", "ریلز جدید",
+            "new post", "پست جدید",
+            "share to reels", "هم‌رسانی در ریلز",
+            "edit cover", "ویرایش کاور",
+            "write a caption", "نوشتن شرح", "یک شرح بنویسید", "نوشتن زیرنویس",
+            "also share to feed", "همچنین هم‌رسانی در فید", "هم‌رسانی در فید",
+            "tag people", "برچسب‌گذاری افراد", "تگ کردن افراد",
+            "tag products", "برچسب‌گذاری محصولات",
+            "add audience", "افزودن مخاطب", "مخاطبان",
+            "add topics", "افزودن موضوع‌ها",
+            "add location", "افزودن مکان",
+            "save draft", "ذخیره پیش‌نویس",
+            "edit video", "ویرایش ویدیو",
+            "voiceover", "صدابرداری",
+            "select multiple", "انتخاب چند مورد"
+        )
+        for (indicator in shareIndicators) {
+            if (allText.contains(indicator) || allDescs.contains(indicator)) {
+                return true
+            }
+        }
+
+        // Story tray / Story creation buttons
+        if ((allText.contains("your story") || allText.contains("استوری شما") || allText.contains("داستان شما")) &&
+            (allText.contains("close friends") || allText.contains("دوستان صمیمی") || allDescs.contains("close friends") || allDescs.contains("دوستان صمیمی") || allText.contains("send to") || allText.contains("ارسال به"))) {
+            return true
+        }
+
+        // Mode switcher in camera: POST, STORY, REEL, LIVE (in En or Fa)
+        var modeCount = 0
+        if (allText.contains("story") || allText.contains("استوری")) modeCount++
+        if (allText.contains("reel") || allText.contains("ریلز")) modeCount++
+        if (allText.contains("post") || allText.contains("پست")) modeCount++
+        if (allText.contains("live") || allText.contains("زنده")) modeCount++
+        if (modeCount >= 2 && (allText.contains("recents") || allText.contains("اخیراً") || allText.contains("gallery") || allText.contains("گالری") || allDescs.contains("camera") || allDescs.contains("دوربین"))) {
+            return true
+        }
+
+        return false
+    }
+
+    private fun isInstagramNotificationsScreen(
+        root: AccessibilityNodeInfo,
+        visibleTexts: List<String>,
+        allText: String,
+        allDescs: String
+    ): Boolean {
+        // 1. View ID indicators for Notifications / Activity
+        if (findNodeByViewIdContains(root, "newsfeed") != null ||
+            findNodeByViewIdContains(root, "activity_center") != null ||
+            findNodeByViewIdContains(root, "notification_center") != null ||
+            findNodeByViewIdContains(root, "notification") != null) {
+            return true
+        }
+
+        // 2. Action bar title view ID check (multiple common Instagram view IDs)
+        val notifHeaders = setOf(
+            "notifications", "activity", "اعلان‌ها", "اعلان", "فعالیت", "فعالیت‌ها",
+            "اعلان های شما", "اعلانهای شما", "notifs", "updates", "به‌روزرسانی‌ها"
+        )
+        for (viewId in listOf(
+            "com.instagram.android:id/action_bar_title",
+            "com.instagram.android:id/title_text_view",
+            "com.instagram.android:id/action_bar_textview_title",
+            "com.instagram.android:id/action_bar_title_view"
+        )) {
+            val titleNodes = root.findAccessibilityNodeInfosByViewId(viewId)
+            if (!titleNodes.isNullOrEmpty()) {
+                for (node in titleNodes) {
+                    val t = node.text?.toString()?.trim()?.lowercase(java.util.Locale.ROOT) ?: ""
+                    if (notifHeaders.any { t.contains(it) }) return true
+                }
+            }
+        }
+
+        // 3. Top header text for Notifications / Activity
+        val topTexts = visibleTexts.take(8).map { it.trim().lowercase(java.util.Locale.ROOT) }
+        if (topTexts.any { txt -> notifHeaders.any { txt == it || txt.startsWith("$it ") || txt.endsWith(" $it") } }) {
+            return true
+        }
+
+        // 4. Characteristic notification feed phrases in text
+        val hasNotifPhrases = allText.contains("started following you") ||
+            allText.contains("شما را دنبال کرد") ||
+            allText.contains("liked your") ||
+            allText.contains("پسندید") ||
+            allText.contains("commented:") ||
+            allText.contains("دیدگاه:") ||
+            allText.contains("requested to follow") ||
+            allText.contains("درخواست دنبال کردن")
+        if (hasNotifPhrases && (allText.contains("today") || allText.contains("امروز") || allText.contains("this week") || allText.contains("این هفته") || allText.contains("earlier") || allText.contains("قبلی"))) {
+            return true
+        }
+
+        return false
+    }
+
+    private fun isInstagramProfileScreen(
+        root: AccessibilityNodeInfo,
+        visibleTexts: List<String>,
+        allText: String,
+        allDescs: String
+    ): Boolean {
+        // 1. View ID indicators
+        if (findNodeByViewIdContains(root, "user_detail_fragment") != null ||
+            findNodeByViewIdContains(root, "profile_header_container") != null ||
+            findNodeByViewIdContains(root, "row_profile_header") != null) {
+            return true
+        }
+
+        // 2. Profile header buttons: Edit profile / Share profile
+        val hasEditOrShare = allText.contains("edit profile") || allText.contains("share profile") ||
+            allText.contains("ویرایش نمایه") || allText.contains("هم‌رسانی نمایه") ||
+            allText.contains("ویرایش پروفایل") || allText.contains("هم‌رسانی پروفایل")
+
+        if (hasEditOrShare) return true
+
+        return false
+    }
+
+    private fun isInstagramInsightsScreen(
+        root: AccessibilityNodeInfo,
+        visibleTexts: List<String>,
+        allText: String,
+        allDescs: String
+    ): Boolean {
+        if (findNodeByViewIdContains(root, "insights") != null ||
+            findNodeByViewIdContains(root, "business_hub") != null ||
+            findNodeByViewIdContains(root, "pro_home") != null) {
+            return true
+        }
+
+        val topTexts = visibleTexts.take(6).map { it.trim().lowercase(java.util.Locale.ROOT) }
+        return topTexts.any { it == "professional dashboard" || it == "داشبورد حرفه‌ای" || it == "insights" || it == "بینش‌ها" }
+    }
+
     private fun detectInstagramSection(root: AccessibilityNodeInfo): String {
         val screenBounds = android.graphics.Rect()
         root.getBoundsInScreen(screenBounds)
         val screenHeight = if (screenBounds.height() > 0) screenBounds.height() else applicationContext.resources.displayMetrics.heightPixels
         val screenWidth = if (screenBounds.width() > 0) screenBounds.width() else applicationContext.resources.displayMetrics.widthPixels
 
-        // 1. Check if the bottom navigation bar actively reports a selected tab
-        val bottomSection = detectInstagramBottomNavSection(root, screenWidth, screenHeight)
-        if (bottomSection != null) {
-            lastSelectedBottomNavSection["com.instagram.android"] = bottomSection
-            return bottomSection
+        // 1. Stories viewer
+        if (findNodeByViewIdContains(root, "story_progress_bar") != null ||
+            findNodeByViewIdContains(root, "progress_bar_wrapper") != null ||
+            findNodeByViewIdContains(root, "stories_viewer_container") != null) {
+            return "Stories"
         }
 
-        // 2. Dedicated Reels Detection (fast & reliable when doomscrolling reels)
-        if (isInstagramReelsScreen(root, screenWidth, screenHeight)) {
-            lastSelectedBottomNavSection["com.instagram.android"] = "Reels"
-            return "Reels"
-        }
-
-        // 3. Screen content heuristics with deep traversal
+        // Deep screen traversal
         val visibleTexts = mutableListOf<String>()
         collectVisibleTexts(root, visibleTexts, maxDepth = 25, maxNodes = 600)
         val allText = visibleTexts.joinToString(" ").lowercase(java.util.Locale.ROOT)
@@ -880,7 +1429,31 @@ class SmartTrackerService : AccessibilityService() {
         collectContentDescriptions(root, contentDescs, maxDepth = 25, maxNodes = 600)
         val allDescs = contentDescs.joinToString(" ").lowercase(java.util.Locale.ROOT)
 
-        // Direct Messages / Inbox
+        // 2. Create / Camera / Story & Reels posting
+        if (isInstagramCreationOrShareScreen(root, visibleTexts, allText, allDescs)) {
+            lastSelectedBottomNavSection["com.instagram.android"] = "Create"
+            return "Create"
+        }
+
+        // 3. Notifications / Activity center (PRIORITIZED BEFORE REELS)
+        if (isInstagramNotificationsScreen(root, visibleTexts, allText, allDescs)) {
+            lastSelectedBottomNavSection["com.instagram.android"] = "Activity"
+            return "Activity"
+        }
+
+        // 4. Profile (PRIORITIZED BEFORE REELS)
+        if (isInstagramProfileScreen(root, visibleTexts, allText, allDescs)) {
+            lastSelectedBottomNavSection["com.instagram.android"] = "Profile"
+            return "Profile"
+        }
+
+        // 5. Insights / Professional Dashboard (PRIORITIZED BEFORE REELS)
+        if (isInstagramInsightsScreen(root, visibleTexts, allText, allDescs)) {
+            lastSelectedBottomNavSection["com.instagram.android"] = "Profile"
+            return "Profile"
+        }
+
+        // 6. Direct Messages / Inbox
         if ((allText.contains("messages") && allText.contains("chats")) ||
             (allDescs.contains("direct message") && !allDescs.contains("like") && !allDescs.contains("لایک")) ||
             allText.contains("search chats") || allText.contains("جستجو در گفتگوها")) {
@@ -888,44 +1461,40 @@ class SmartTrackerService : AccessibilityService() {
             return "Messages"
         }
 
-        // Profile (own profile header)
-        if ((allText.contains("edit profile") || allText.contains("ویرایش نمایه") ||
-            allText.contains("share profile") || allText.contains("هم‌رسانی نمایه")) &&
-            (allText.contains("followers") || allText.contains("following") || allText.contains("دنبال‌کنندگان") || allText.contains("posts"))) {
-            lastSelectedBottomNavSection["com.instagram.android"] = "Profile"
-            return "Profile"
+        // 7. Check if bottom navigation actively reports a selected tab
+        val bottomSection = detectInstagramBottomNavSection(root, screenWidth, screenHeight)
+        if (bottomSection != null) {
+            lastSelectedBottomNavSection["com.instagram.android"] = bottomSection
+            return bottomSection
         }
 
-        // Explore (search grid)
+        // 8. Dedicated Reels Detection
+        if (isInstagramReelsScreen(root, screenWidth, screenHeight, visibleTexts, allText, allDescs)) {
+            lastSelectedBottomNavSection["com.instagram.android"] = "Reels"
+            return "Reels"
+        }
+
+        // 9. Explore (search grid)
         if ((allText.contains("search") || allText.contains("جستجو")) &&
             (allText.contains("for you") && allText.contains("tags") || allText.contains("explore"))) {
             lastSelectedBottomNavSection["com.instagram.android"] = "Explore"
             return "Explore"
         }
 
-        // Create / Camera
-        if ((allText.contains("story") && allText.contains("reel") && allText.contains("live")) ||
-            allDescs.contains("camera shutter") || allDescs.contains("شاتر")) {
-            lastSelectedBottomNavSection["com.instagram.android"] = "Create"
-            return "Create"
-        }
-
-        // Home feed (Stories tray with "Your story" / "استوری شما")
+        // 10. Home feed (Stories tray with "Your story" / "استوری شما" or Instagram header)
         if (allText.contains("your story") || allText.contains("استوری شما")) {
             lastSelectedBottomNavSection["com.instagram.android"] = "Home"
             return "Home"
         }
-
-        // Additional check for Reels from texts
-        if (allDescs.contains("reels") || allDescs.contains("ریلز") ||
-            visibleTexts.any { it.trim().equals("reels", ignoreCase = true) || it.trim().equals("ریلز", ignoreCase = true) } ||
-            allText.contains("made with edits") || allText.contains("original audio") || allText.contains("صدای اصلی")) {
-            lastSelectedBottomNavSection["com.instagram.android"] = "Reels"
-            return "Reels"
+        val topNodes = mutableListOf<AccessibilityNodeInfo>()
+        findTopHeaderNodes(root, (screenHeight * 0.15f).toInt(), topNodes, maxDepth = 20)
+        val topTextsAndDescs = topNodes.map { (it.text?.toString() ?: "") + " " + (it.contentDescription?.toString() ?: "") }.joinToString(" ").lowercase(java.util.Locale.ROOT)
+        if (topTextsAndDescs.contains("instagram") || (topTextsAndDescs.contains("direct") && (topTextsAndDescs.contains("activity") || topTextsAndDescs.contains("notification")))) {
+            lastSelectedBottomNavSection["com.instagram.android"] = "Home"
+            return "Home"
         }
 
-        // 4. ★ PERSISTENCE: Continue recording the screen/s related to the LAST SELECTED bottom navigation item
-        // until the app finds out the selected item has changed!
+        // 11. Persistence: Continue recording the screen related to LAST SELECTED bottom navigation item
         val lastSelected = lastSelectedBottomNavSection["com.instagram.android"]
         if (!lastSelected.isNullOrEmpty()) {
             return lastSelected
@@ -933,6 +1502,23 @@ class SmartTrackerService : AccessibilityService() {
 
         // Initial default if no tab has ever been detected yet
         return "Home"
+    }
+
+    private fun getInstagramSectionFromTabNode(tab: AccessibilityNodeInfo): String? {
+        val desc = (tab.contentDescription?.toString() ?: "").lowercase(java.util.Locale.ROOT)
+        val text = (tab.text?.toString() ?: "").lowercase(java.util.Locale.ROOT)
+        val viewId = (tab.viewIdResourceName ?: "").lowercase(java.util.Locale.ROOT)
+        val combined = "$desc $text $viewId"
+
+        return when {
+            combined.contains("reel") || combined.contains("clips") || combined.contains("ریلز") -> "Reels"
+            combined.contains("search") || combined.contains("explore") || combined.contains("جستجو") || combined.contains("کاوش") || combined.contains("اکسپلور") -> "Explore"
+            combined.contains("home") || combined.contains("feed") || combined.contains("خانه") -> "Home"
+            combined.contains("profile") || combined.contains("نمایه") || combined.contains("پروفایل") -> "Profile"
+            combined.contains("create") || combined.contains("post") || combined.contains("ایجاد") || combined.contains("پست جدید") || combined.contains("camera") -> "Create"
+            combined.contains("activity") || combined.contains("notification") || combined.contains("اعلان") -> "Activity"
+            else -> null
+        }
     }
 
     private fun detectInstagramBottomNavSection(root: AccessibilityNodeInfo, screenWidth: Int, screenHeight: Int): String? {
@@ -949,16 +1535,16 @@ class SmartTrackerService : AccessibilityService() {
         if (bottomBar != null && bottomBar.childCount in 4..6) {
             for (i in 0 until bottomBar.childCount) {
                 val tab = bottomBar.getChild(i) ?: continue
-                if (tab.isSelected || findSelectedInSubtree(tab) != null) {
-                    return sectionNameForBottomNavIndex(i)
-                }
                 val desc = (tab.contentDescription?.toString() ?: "").lowercase(java.util.Locale.ROOT)
                 val stateDesc = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                     (tab.stateDescription?.toString() ?: "").lowercase(java.util.Locale.ROOT)
                 } else ""
-                if (desc.contains("selected") || desc.contains("active") || desc.contains("انتخاب") || desc.contains("فعال") ||
-                    stateDesc.contains("selected") || stateDesc.contains("active") || stateDesc.contains("انتخاب") || stateDesc.contains("فعال")) {
-                    return sectionNameForBottomNavIndex(i)
+                val isTabSelected = tab.isSelected || findSelectedInSubtree(tab) != null ||
+                    desc.contains("selected") || desc.contains("active") || desc.contains("انتخاب") || desc.contains("فعال") ||
+                    stateDesc.contains("selected") || stateDesc.contains("active") || stateDesc.contains("انتخاب") || stateDesc.contains("فعال")
+
+                if (isTabSelected) {
+                    return getInstagramSectionFromTabNode(tab) ?: sectionNameForBottomNavIndex(i)
                 }
             }
         }
@@ -969,6 +1555,9 @@ class SmartTrackerService : AccessibilityService() {
             val tabRect = android.graphics.Rect()
             selectedTab.getBoundsInScreen(tabRect)
             if (tabRect.centerY() >= bottomNavMinY) {
+                val fromTab = getInstagramSectionFromTabNode(selectedTab)
+                if (fromTab != null) return fromTab
+
                 val cx = tabRect.centerX()
                 val idx = when {
                     cx < screenWidth * 0.20f -> 0
@@ -986,12 +1575,6 @@ class SmartTrackerService : AccessibilityService() {
         findNodesInScreenArea(root, bottomNavMinY, screenHeight, bottomNodes, maxDepth = 25)
         if (bottomNodes.isEmpty()) return null
 
-        // 5 buckets across width (0..4)
-        // 0: 0%..20% W -> Home
-        // 1: 20%..40% W -> Reels
-        // 2: 40%..60% W -> Messages (Paperrocket)
-        // 3: 60%..80% W -> Explore (Magnifier)
-        // 4: 80%..100% W -> Profile
         val bucketNodes = Array(5) { mutableListOf<AccessibilityNodeInfo>() }
         val rect = android.graphics.Rect()
 
@@ -1018,6 +1601,8 @@ class SmartTrackerService : AccessibilityService() {
             val nodes = bucketNodes[i]
             for (node in nodes) {
                 if (node.isSelected || findSelectedInSubtree(node) != null) {
+                    val fromNode = getInstagramSectionFromTabNode(node)
+                    if (fromNode != null) return fromNode
                     return sectionNameForBottomNavIndex(i)
                 }
                 val desc = (node.contentDescription?.toString() ?: "").lowercase(java.util.Locale.ROOT)
@@ -1027,22 +1612,9 @@ class SmartTrackerService : AccessibilityService() {
 
                 if (desc.contains("selected") || desc.contains("active") || desc.contains("انتخاب") || desc.contains("فعال") ||
                     stateDesc.contains("selected") || stateDesc.contains("active") || stateDesc.contains("انتخاب") || stateDesc.contains("فعال")) {
+                    val fromNode = getInstagramSectionFromTabNode(node)
+                    if (fromNode != null) return fromNode
                     return sectionNameForBottomNavIndex(i)
-                }
-            }
-        }
-
-        // Check for specific tab content descriptions / view IDs
-        for (i in 0..4) {
-            val nodes = bucketNodes[i]
-            for (node in nodes) {
-                val desc = (node.contentDescription?.toString() ?: "").lowercase(java.util.Locale.ROOT)
-                val viewId = (node.viewIdResourceName ?: "").lowercase(java.util.Locale.ROOT)
-
-                if (i == 1 && (desc.contains("reel") || desc.contains("ریلز") || desc.contains("clips") || viewId.contains("clips"))) {
-                    if (node.isFocused || node.isSelected || desc.contains("tab") || desc.contains("selected")) {
-                        return "Reels"
-                    }
                 }
             }
         }
@@ -1051,84 +1623,143 @@ class SmartTrackerService : AccessibilityService() {
     }
 
     private fun sectionNameForBottomNavIndex(index: Int): String {
+        val lastSelected = lastSelectedBottomNavSection["com.instagram.android"]
+        if (lastSelected == "Reels" && (index == 2 || index == 3)) {
+            return "Reels"
+        }
         return when (index) {
             0 -> "Home"
-            1 -> "Reels"
-            2 -> "Messages"
-            3 -> "Explore"
+            1 -> "Explore"
+            2 -> "Create"
+            3 -> "Reels"
             4 -> "Profile"
             else -> "Home"
         }
     }
 
-    private fun isInstagramReelsScreen(root: AccessibilityNodeInfo, screenWidth: Int, screenHeight: Int): Boolean {
-        // Fast ID checks
-        if (findNodeByViewIdContains(root, "clips") != null ||
+    private fun isInstagramReelsScreen(
+        root: AccessibilityNodeInfo,
+        screenWidth: Int,
+        screenHeight: Int,
+        texts: List<String>? = null,
+        allTextIn: String? = null,
+        allDescsIn: String? = null
+    ): Boolean {
+        // 1. EXCLUSIONS FIRST (Fail-fast against non-Reels screens)
+        val visibleTexts = texts?.toMutableList() ?: mutableListOf<String>().also {
+            collectVisibleTexts(root, it, maxDepth = 25, maxNodes = 400)
+        }
+        val allText = allTextIn ?: visibleTexts.joinToString(" ").lowercase(java.util.Locale.ROOT)
+        val allDescs = allDescsIn ?: run {
+            val descs = mutableListOf<String>()
+            collectContentDescriptions(root, descs, maxDepth = 25, maxNodes = 400)
+            descs.joinToString(" ").lowercase(java.util.Locale.ROOT)
+        }
+
+        // A. Creation, editing, selecting, or sharing a Reel/Story/Post
+        if (isInstagramCreationOrShareScreen(root, visibleTexts, allText, allDescs)) {
+            return false
+        }
+
+        // B. Interactive text inputs (comments sheet, DM composer, search bar, caption)
+        if (hasVisibleEditText(root)) {
+            return false
+        }
+
+        // C. Notifications / Activity screen (Strictly excluded)
+        if (isInstagramNotificationsScreen(root, visibleTexts, allText, allDescs)) {
+            return false
+        }
+
+        // D. Profile screen (Strictly excluded)
+        if (isInstagramProfileScreen(root, visibleTexts, allText, allDescs)) {
+            return false
+        }
+
+        // E. Insights / Professional Dashboard screen (Strictly excluded)
+        if (isInstagramInsightsScreen(root, visibleTexts, allText, allDescs)) {
+            return false
+        }
+
+        // F. Instagram Stories viewer check
+        if (findNodeByViewIdContains(root, "story_progress_bar") != null ||
+            findNodeByViewIdContains(root, "progress_bar_wrapper") != null ||
+            findNodeByViewIdContains(root, "stories_viewer_container") != null) {
+            return false
+        }
+
+        // G. Home feed top header check
+        val topHeaderNodes = mutableListOf<AccessibilityNodeInfo>()
+        findTopHeaderNodes(root, (screenHeight * 0.15f).toInt(), topHeaderNodes, maxDepth = 20)
+        val topHeaderCombined = topHeaderNodes.map {
+            (it.text?.toString() ?: "") + " " + (it.contentDescription?.toString() ?: "")
+        }.joinToString(" ").lowercase(java.util.Locale.ROOT)
+        if (topHeaderCombined.contains("instagram") ||
+            (topHeaderCombined.contains("direct") && (topHeaderCombined.contains("notification") || topHeaderCombined.contains("activity")))) {
+            return false
+        }
+
+        // 2. POSITIVE MATCHES:
+        // A. Specific Reels viewer container IDs (ONLY viewer IDs, not generic "clips" which matches clips_editor)
+        if (findNodeByViewIdContains(root, "clips_viewer") != null ||
+            findNodeByViewIdContains(root, "layout_clips_viewer") != null ||
             findNodeByViewIdContains(root, "reel_viewer") != null ||
-            findNodeByViewIdContains(root, "reel_recycler") != null ||
-            findNodeByViewIdContains(root, "unified_video_viewer") != null) {
+            findNodeByViewIdContains(root, "clips_video_container") != null ||
+            findNodeByViewIdContains(root, "clips_author_username") != null) {
             return true
         }
 
-        val visibleTexts = mutableListOf<String>()
-        val contentDescs = mutableListOf<String>()
-        val rightRailNodes = mutableListOf<AccessibilityNodeInfo>()
-
-        collectReelsScreenData(root, visibleTexts, contentDescs, rightRailNodes, screenWidth, screenHeight, maxDepth = 25, maxNodes = 600)
-
-        val allText = visibleTexts.joinToString(" ").lowercase(java.util.Locale.ROOT)
-        val allDescs = contentDescs.joinToString(" ").lowercase(java.util.Locale.ROOT)
-
-        // 1. Explicit Reels text/contentDesc
-        if (allDescs.contains("reels") || allDescs.contains("ریلز") ||
-            visibleTexts.any { it.trim().equals("reels", ignoreCase = true) || it.trim().equals("ریلز", ignoreCase = true) }) {
+        // B. Top header explicitly has "Reels" / "Friends" ("ریلز", "دوستان")
+        if (isInstagramReelsHeaderPresent(root, screenWidth, screenHeight)) {
             return true
         }
 
-        // 2. Specific Reels badges & indicators
-        if (allText.contains("made with edits") || allText.contains("remix with") ||
-            allText.contains("original audio") || allText.contains("صدای اصلی") ||
-            allText.contains("use audio") || allText.contains("استفاده از صدا") ||
-            allText.contains("ساخته شده با") || allText.contains("ریمیکس با") ||
-            allDescs.contains("original audio") || allDescs.contains("صدای اصلی")) {
+        // C. Bottom Navigation actively indicates Reels tab is selected or was selected
+        val bottomSection = detectInstagramBottomNavSection(root, screenWidth, screenHeight)
+        if (bottomSection == "Reels") {
+            return true
+        }
+        if (lastSelectedBottomNavSection["com.instagram.android"] == "Reels") {
             return true
         }
 
-        // 3. Side action rail pattern (numbers like "5,768", "18.2K", "212", "۵٬۷۶۸", etc.)
-        val metricNumberRegex = Regex("""^[\d\u06F0-\u06F9\u0660-\u0669]+(\.[\d\u06F0-\u06F9\u0660-\u0669]+)?[KMBkmb\u0647\u0632\u0627\u0631\u0645\u06CC\u0644\u06CC\u0648\u0646]?$""")
-        var metricCount = 0
-        for (node in rightRailNodes) {
-            val rawText = (node.text?.toString() ?: node.contentDescription?.toString() ?: "").trim()
-            val clean = rawText.replace(",", "").replace("٬", "").replace("،", "").replace(" ", "").trim()
-            if (clean.matches(metricNumberRegex) || clean.endsWith("K", ignoreCase = true) || clean.endsWith("M", ignoreCase = true) ||
-                clean.endsWith("هزار") || clean.endsWith("میلیون")) {
-                metricCount++
+        // C. Vertical action rail check (tightened to small buttons pinned at screen edge)
+        val railNodes = mutableListOf<AccessibilityNodeInfo>()
+        collectReelsScreenData(root, railNodes, screenWidth, screenHeight, maxDepth = 25, maxNodes = 400)
+
+        val likeNode = railNodes.firstOrNull { node ->
+            val desc = (node.contentDescription?.toString() ?: node.text?.toString() ?: "").trim().lowercase(java.util.Locale.ROOT)
+            val hasLikeKeyword = desc.contains("like") || desc.contains("liked") || desc.contains("پسندیدن") || desc.contains("پسند") || desc.contains("لایک")
+            val notSentence = !desc.contains("liked your") && !desc.contains("liked a") &&
+                !desc.contains("others") && !desc.contains("دیگران") && !desc.contains("شما را پسندید")
+            desc.length <= 60 && hasLikeKeyword && notSentence
+        }
+        val commentNode = railNodes.firstOrNull { node ->
+            val desc = (node.contentDescription?.toString() ?: node.text?.toString() ?: "").trim().lowercase(java.util.Locale.ROOT)
+            val hasCommentKeyword = desc.contains("comment") || desc.contains("دیدگاه") || desc.contains("نظر") || desc.contains("کامنت")
+            val notSentence = !desc.contains("commented") && !desc.contains("نظر داد") &&
+                !desc.contains("دیدگاه نوشت") && !desc.contains("کامنت گذاشت")
+            desc.length <= 60 && hasCommentKeyword && notSentence
+        }
+
+        if (likeNode != null && commentNode != null) {
+            val likeRect = android.graphics.Rect()
+            val commentRect = android.graphics.Rect()
+            likeNode.getBoundsInScreen(likeRect)
+            commentNode.getBoundsInScreen(commentRect)
+
+            val sameSide = (likeRect.centerX() > screenWidth * 0.5f) == (commentRect.centerX() > screenWidth * 0.5f)
+            if (sameSide) {
+                val xDiff = kotlin.math.abs(likeRect.centerX() - commentRect.centerX())
+                val yDiff = kotlin.math.abs(likeRect.centerY() - commentRect.centerY())
+
+                // In Reels: Like & Comment share almost the same X coordinate, and are stacked vertically
+                val minYDiff = (screenHeight * 0.03f).toInt()
+                val maxYDiff = (screenHeight * 0.35f).toInt()
+                if (xDiff < screenWidth * 0.15f && yDiff in minYDiff..maxYDiff) {
+                    return true
+                }
             }
-        }
-
-        val hasLike = allDescs.contains("like") || allDescs.contains("پسندیدن") || allDescs.contains("لایک") || allDescs.contains("unlike") || allDescs.contains("پسند")
-        val hasComment = allDescs.contains("comment") || allDescs.contains("دیدگاه") || allDescs.contains("نظر") || allDescs.contains("کامنت")
-        val hasShare = allDescs.contains("share") || allDescs.contains("هم‌رسانی") || allDescs.contains("ارسال") || allDescs.contains("send") || allDescs.contains("اشتراک‌گذاری")
-        val hasSave = allDescs.contains("save") || allDescs.contains("ذخیره") || allDescs.contains("نشان کردن") || allDescs.contains("bookmark")
-        val hasRepost = allDescs.contains("repost") || allDescs.contains("بازنشر") || allDescs.contains("تکرار")
-        val hasFollowButton = allText.contains("follow") || allText.contains("دنبال کردن")
-
-        val actionButtonCount = (if (hasLike) 1 else 0) + (if (hasComment) 1 else 0) + (if (hasShare) 1 else 0) + (if (hasSave) 1 else 0) + (if (hasRepost) 1 else 0)
-
-        if (actionButtonCount >= 2) {
-            return true
-        }
-
-        if (metricCount >= 1 && actionButtonCount >= 1) {
-            return true
-        }
-
-        if (hasFollowButton && actionButtonCount >= 1) {
-            return true
-        }
-
-        if (metricCount >= 2) {
-            return true
         }
 
         return false
@@ -1136,35 +1767,33 @@ class SmartTrackerService : AccessibilityService() {
 
     private fun collectReelsScreenData(
         node: AccessibilityNodeInfo,
-        texts: MutableList<String>,
-        descs: MutableList<String>,
         rightRailNodes: MutableList<AccessibilityNodeInfo>,
         screenWidth: Int,
         screenHeight: Int,
         maxDepth: Int,
         maxNodes: Int
     ) {
-        if (maxDepth <= 0 || (texts.size + descs.size) >= maxNodes) return
-
-        val text = node.text?.toString()
-        val desc = node.contentDescription?.toString()
-        if (!text.isNullOrEmpty()) texts.add(text)
-        if (!desc.isNullOrEmpty()) descs.add(desc)
+        if (maxDepth <= 0 || rightRailNodes.size >= maxNodes) return
 
         val rect = android.graphics.Rect()
         try {
-            node.getBoundsInScreen(rect)
-            val isRailX = rect.centerX() > screenWidth * 0.60f || rect.centerX() < screenWidth * 0.40f
-            val isRailY = rect.centerY() in (screenHeight * 0.15f).toInt()..(screenHeight * 0.92f).toInt()
-            if (isRailX && isRailY) {
-                rightRailNodes.add(node)
+            if (node.isVisibleToUser) {
+                node.getBoundsInScreen(rect)
+                val isRailX = rect.centerX() > screenWidth * 0.65f || rect.centerX() < screenWidth * 0.35f
+                val isRailY = rect.centerY() in (screenHeight * 0.15f).toInt()..(screenHeight * 0.92f).toInt()
+                val isSmallButton = rect.width() in 20..(screenWidth * 0.30f).toInt() &&
+                    rect.height() in 20..(screenHeight * 0.20f).toInt()
+
+                if (isRailX && isRailY && isSmallButton) {
+                    rightRailNodes.add(node)
+                }
             }
         } catch (_: Exception) { }
 
         for (i in 0 until node.childCount) {
-            if ((texts.size + descs.size) >= maxNodes) break
+            if (rightRailNodes.size >= maxNodes) break
             val child = node.getChild(i) ?: continue
-            collectReelsScreenData(child, texts, descs, rightRailNodes, screenWidth, screenHeight, maxDepth - 1, maxNodes)
+            collectReelsScreenData(child, rightRailNodes, screenWidth, screenHeight, maxDepth - 1, maxNodes)
         }
     }
 
@@ -1218,13 +1847,21 @@ class SmartTrackerService : AccessibilityService() {
     /**
      * Checks whether the Instagram Reels top header containing ("Reels", "Friends" / "ریلز", "دوستان")
      * is currently visible at the top of the screen (top ~22% of screen).
+     * Strictly excludes creation headers like "New reel", "Close friends", "Share to Reels", drafts, etc.
      */
     private fun isInstagramReelsHeaderPresent(root: AccessibilityNodeInfo, screenWidth: Int, screenHeight: Int): Boolean {
         val headerMaxY = (screenHeight * 0.22f).toInt()
-        val headerKeywords = listOf("Reels", "Friends", "ریلز", "دوستان")
+        val forbiddenSubstrings = listOf(
+            "جدید", "new", "صمیمی", "close", "پیش‌نویس", "draft",
+            "هم‌رسانی", "اشتراک", "share", "تنظیمات", "settings",
+            "ویرایش", "edit", "پست", "post", "استوری", "story",
+            "شرح", "caption", "مکان", "location", "افراد", "people",
+            "followers", "following", "دنبال‌کنندگان", "دنبال‌شونده‌ها", "posts"
+        )
+        val validTabs = setOf("reels", "friends", "ریلز", "دوستان")
 
         // 1. Fast text-indexed search
-        for (kw in headerKeywords) {
+        for (kw in listOf("Reels", "Friends", "ریلز", "دوستان")) {
             try {
                 val matching = root.findAccessibilityNodeInfosByText(kw)
                 if (!matching.isNullOrEmpty()) {
@@ -1234,9 +1871,13 @@ class SmartTrackerService : AccessibilityService() {
                             if (!node.isVisibleToUser) continue
                             node.getBoundsInScreen(rect)
                             if (rect.bottom in 40..headerMaxY && rect.top >= -20 && rect.height() > 10) {
-                                val txt = (node.text?.toString() ?: "").trim()
-                                val desc = (node.contentDescription?.toString() ?: "").trim()
-                                if (txt.contains(kw, ignoreCase = true) || desc.contains(kw, ignoreCase = true)) {
+                                val txt = (node.text?.toString() ?: "").trim().lowercase(java.util.Locale.ROOT)
+                                val desc = (node.contentDescription?.toString() ?: "").trim().lowercase(java.util.Locale.ROOT)
+
+                                if (forbiddenSubstrings.any { txt.contains(it) || desc.contains(it) }) {
+                                    continue
+                                }
+                                if (validTabs.contains(txt) || validTabs.contains(desc)) {
                                     return true
                                 }
                             }
@@ -1257,14 +1898,11 @@ class SmartTrackerService : AccessibilityService() {
                 if (rect.bottom in 40..headerMaxY && rect.top >= -20 && rect.height() > 10) {
                     val txt = (node.text?.toString() ?: "").trim().lowercase(java.util.Locale.ROOT)
                     val desc = (node.contentDescription?.toString() ?: "").trim().lowercase(java.util.Locale.ROOT)
-                    val isShort = txt.length <= 15
-                    if (isShort && (txt == "reels" || txt.startsWith("reels") ||
-                        txt == "friends" || txt.startsWith("friends") ||
-                        txt == "ریلز" || txt.startsWith("ریلز") ||
-                        txt == "دوستان" || txt.startsWith("دوستان") ||
-                        desc == "reels" || desc.startsWith("reels") ||
-                        desc == "friends" || desc.startsWith("friends") ||
-                        desc == "ریلز" || desc == "دوستان")) {
+
+                    if (forbiddenSubstrings.any { txt.contains(it) || desc.contains(it) }) {
+                        continue
+                    }
+                    if (validTabs.contains(txt) || validTabs.contains(desc)) {
                         return true
                     }
                 }
@@ -1275,14 +1913,45 @@ class SmartTrackerService : AccessibilityService() {
     }
 
     private fun extractReelSignature(root: AccessibilityNodeInfo, screenWidth: Int, screenHeight: Int): String {
-        val minY = (screenHeight * 0.50f).toInt()
+        val rootPkg = root.packageName?.toString() ?: ""
+        if (rootPkg == "com.goldenminute.catalyst") {
+            return ""
+        }
+
+        var author = ""
+        val authorNodes = root.findAccessibilityNodeInfosByViewId("com.instagram.android:id/clips_author_username")
+        if (!authorNodes.isNullOrEmpty()) {
+            for (node in authorNodes) {
+                val t = node.text?.toString()?.trim() ?: ""
+                if (t.isNotEmpty()) {
+                    author = t
+                    break
+                }
+            }
+        }
+
+        // Confine the scanned area strictly to the reel content zone (8% to 92% of screen height)
+        // to capture caption, username, and audio info while avoiding system bars.
+        val minY = (screenHeight * 0.08f).toInt()
         val maxY = (screenHeight * 0.92f).toInt()
         val texts = mutableListOf<String>()
-        collectReelsLowerTexts(root, minY, maxY, texts, maxDepth = 20, maxNodes = 15)
-        return texts.joinToString("|")
+        collectReelsUniqueTexts(root, minY, maxY, texts, maxDepth = 45, maxNodes = 8)
+
+        if (author.isEmpty()) {
+            val possibleAuthor = texts.firstOrNull { it.startsWith("@") || (it.length in 3..25 && !it.contains(" ") && !it.contains("\n")) }
+            if (possibleAuthor != null) {
+                author = possibleAuthor
+            }
+        }
+
+        return if (author.isNotEmpty()) {
+            "author:$author|${texts.joinToString("|")}"
+        } else {
+            texts.joinToString("|")
+        }
     }
 
-    private fun collectReelsLowerTexts(
+    private fun collectReelsUniqueTexts(
         node: AccessibilityNodeInfo,
         minY: Int,
         maxY: Int,
@@ -1291,17 +1960,23 @@ class SmartTrackerService : AccessibilityService() {
         maxNodes: Int
     ) {
         if (maxDepth <= 0 || result.size >= maxNodes) return
-        val rect = android.graphics.Rect()
+        val nodePkg = node.packageName?.toString() ?: ""
+        if (nodePkg == "com.goldenminute.catalyst") return
+
         try {
-            if (node.isVisibleToUser) {
-                node.getBoundsInScreen(rect)
-                if (rect.centerY() in minY..maxY) {
-                    val txt = node.text?.toString()?.trim()
-                    val desc = node.contentDescription?.toString()?.trim()
-                    if (!txt.isNullOrEmpty() && txt.length in 2..80) {
-                        result.add(txt)
-                    } else if (!desc.isNullOrEmpty() && desc.length in 2..80) {
-                        result.add(desc)
+            // Must be visible to user to prevent scraping offscreen preloaded reels or hidden views
+            if (!node.isVisibleToUser) return
+
+            val rect = android.graphics.Rect()
+            node.getBoundsInScreen(rect)
+            if (rect.centerY() in minY..maxY && rect.width() > 0 && rect.height() > 0) {
+                val txt = node.text?.toString()?.trim() ?: ""
+                val desc = node.contentDescription?.toString()?.trim() ?: ""
+                val candidate = if (txt.isNotEmpty()) txt else desc
+
+                if (candidate.length in 2..100 && isStableReelContent(candidate)) {
+                    if (!result.contains(candidate)) {
+                        result.add(candidate)
                     }
                 }
             }
@@ -1310,130 +1985,152 @@ class SmartTrackerService : AccessibilityService() {
         for (i in 0 until node.childCount) {
             if (result.size >= maxNodes) break
             val child = node.getChild(i) ?: continue
-            collectReelsLowerTexts(child, minY, maxY, result, maxDepth - 1, maxNodes)
+            collectReelsUniqueTexts(child, minY, maxY, result, maxDepth - 1, maxNodes)
         }
     }
 
-    /**
-     * Detects doomscrolling in Instagram Reels:
-     * 1) Upward scroll: header ("Reels", "Friends") disappears
-     * 2) Downward scroll: header ("Reels", "Friends") reappears
-     * 3) Continued scrolling while header is invisible (user keeps scrolling through reels)
-     */
-    private fun checkInstagramReelsDoomscrolling(
-        root: AccessibilityNodeInfo,
-        packageName: String,
-        isScrollEvent: Boolean = false
-    ) {
-        if (!isDoomscrollingAlertEnabled) return
-        if (checkIsOverlayShowing()) return
-        if (packageName == "com.goldenminute.catalyst") return
-
-        if (packageName != "com.instagram.android") {
-            lastInstagramReelsHeaderVisible = null
-            lastReelSignature = ""
-            return
+    private fun isStableReelContent(text: String): Boolean {
+        val lower = text.lowercase(java.util.Locale.ROOT).trim()
+        val overlayKeywords = listOf(
+            "هشدار اسکرول", "اسکرول بی‌هدف", "اسکرول بی‌پایان", "صرف‌شده", "هدفمند هستم", "بی‌هدف اسکرول",
+            "doomscrolling", "mindfulness", "wasted time", "are you sure", "inspiring"
+        )
+        if (overlayKeywords.any { lower.contains(it) }) {
+            return false
         }
-
-        val displayMetrics = applicationContext.resources.displayMetrics
-        val screenHeight = displayMetrics.heightPixels
-        val screenWidth = displayMetrics.widthPixels
-
-        val inReels = (currentSection == "Reels") || isInstagramReelsScreen(root, screenWidth, screenHeight)
-        if (!inReels) {
-            // Only reset if confirmed in another section of Instagram
-            if (currentSection != "Unknown" && currentSection != "General" && currentSection.isNotEmpty()) {
-                lastInstagramReelsHeaderVisible = null
-                lastReelSignature = ""
-                finalizeCurrentDoomscrollVideo(applicationContext)
-                pendingDoomscrollJob?.cancel()
-            }
-            return
+        val genericActions = listOf(
+            "home", "reels", "reel", "search", "search and explore", "explore", "message", "messages", "profile", "activity", "direct", "camera",
+            "خانه", "ریلز", "جستجو", "کاوش", "پیام", "پیام‌ها", "پروفایل", "نمایه", "فعالیت", "دوربین",
+            "like", "likes", "liked", "comment", "comments", "add comment", "add a comment", "share", "remix", "send", "save", "saved", "bookmark",
+            "more options", "audio", "video", "button", "play", "pause", "tagged",
+            "follow", "following", "sponsored", "threads", "suggested for you", "see translation",
+            "more", "less", "view all", "template", "use template", "watch more", "verified",
+            "double tap", "tap to play", "play or pause", "double tap to play or pause",
+            "seekbar", "seek bar", "repost", "reposted", "reshare", "reshared", "story", "stories", "highlight", "highlights", "grid view", "seen",
+            "پسندیدن", "پسندیدید", "دیدگاه", "دیدگاه‌ها", "نظر", "نظرات", "کامنت", "هم‌رسانی", "اشتراک", "اشتراک‌گذاری", "ذخیره", "ذخیره‌شده",
+            "ارسال", "ریمیکس", "صدا", "ویدیو", "پخش", "توقف", "گزینه‌ها", "دکمه", "برچسب‌گذاری",
+            "دنبال کردن", "دنبال می‌کنید", "تبلیغ", "حمایت‌شده", "پیشنهاد برای شما", "مشاهده ترجمه", "دیدن ترجمه",
+            "بیشتر", "کمتر", "مشاهده همه", "افزودن دیدگاه", "تردز", "الگو", "قالب", "استفاده از الگو", "مشاهده بیشتر", "تأییدشده"
+        )
+        if (genericActions.any { lower == it || lower.startsWith("$it ") || lower.endsWith(" $it") }) {
+            return false
         }
-
-        val headerVisible = isInstagramReelsHeaderPresent(root, screenWidth, screenHeight)
-        val prevHeaderVisible = lastInstagramReelsHeaderVisible
-        val currentSignature = extractReelSignature(root, screenWidth, screenHeight)
-        val signatureChanged = currentSignature.isNotEmpty() && (lastReelSignature.isEmpty() || currentSignature != lastReelSignature)
-
-        // 1. Initial Entry into Reels: establish baseline
-        if (prevHeaderVisible == null) {
-            lastInstagramReelsHeaderVisible = headerVisible
-            if (currentSignature.isNotEmpty()) {
-                lastReelSignature = currentSignature
-            }
-            Log.d(TAG, "Entered Instagram Reels: baseline established (headerVisible = $headerVisible, sig = $currentSignature)")
-            return
+        if (lower.matches(Regex("^[0-9.,:\\s]+[kmbKMB]?$"))) {
+            return false
         }
-
-        val now = System.currentTimeMillis()
-        val isDebounced = (now - lastReelsDoomscrollTriggerTime) > 2500L
-
-        // 2. Trigger Case 1: Scroll UPWARD (Header "Reels", "Friends" disappeared)
-        if (prevHeaderVisible && !headerVisible) {
-            finalizeCurrentDoomscrollVideo(applicationContext)
-            lastInstagramReelsHeaderVisible = false
-            if (currentSignature.isNotEmpty()) {
-                lastReelSignature = currentSignature
-            }
-            Log.d(TAG, "Instagram Reels scroll upward detected (header disappeared). Scheduling doomscrolling dialog in 3s.")
-            if (isDebounced && !checkIsOverlayShowing()) {
-                scheduleDoomscrollingOverlay(packageName)
-            }
-            return
-        }
-
-        // 3. Trigger Case 2: Scroll DOWNWARD (Header "Reels", "Friends" reappeared)
-        if (!prevHeaderVisible && headerVisible) {
-            finalizeCurrentDoomscrollVideo(applicationContext)
-            lastInstagramReelsHeaderVisible = true
-            if (currentSignature.isNotEmpty()) {
-                lastReelSignature = currentSignature
-            }
-            Log.d(TAG, "Instagram Reels scroll downward detected (header reappeared). Scheduling doomscrolling dialog in 3s.")
-            if (isDebounced && !checkIsOverlayShowing()) {
-                scheduleDoomscrollingOverlay(packageName)
-            }
-            return
-        }
-
-        // 4. Trigger Case 3: User KEEPS SCROLLING while header texts are invisible
-        if (!headerVisible && (isScrollEvent || signatureChanged)) {
-            finalizeCurrentDoomscrollVideo(applicationContext)
-            if (currentSignature.isNotEmpty()) {
-                lastReelSignature = currentSignature
-            }
-            Log.d(TAG, "Instagram Reels continued scroll detected while header invisible (isScroll=$isScrollEvent, sigChanged=$signatureChanged). Scheduling doomscrolling dialog in 3s.")
-            if (isDebounced && !checkIsOverlayShowing()) {
-                scheduleDoomscrollingOverlay(packageName)
-            }
-            return
-        }
-
-        // Keep signature updated even if not debounced yet
-        if (currentSignature.isNotEmpty()) {
-            lastReelSignature = currentSignature
-        }
+        return true
     }
+
+    // NOTE: checkInstagramReelsDoomscrolling has been removed.
+    // Doomscrolling detection is now handled directly in onAccessibilityEvent:
+    //   1) Initial Reels entry → detected via TYPE_WINDOW_STATE_CHANGED section transition
+    //   2) Reel swipes → detected via dedicated TYPE_VIEW_SCROLLED handler (not throttled)
+    // This eliminates signature-instability debounce storms and dropped scroll events.
 
     private var pendingDoomscrollJob: Job? = null
 
-    private fun scheduleDoomscrollingOverlay(packageName: String) {
+    private fun scheduleDoomscrollingOverlay(packageName: String, reelId: String) {
+        val now = System.currentTimeMillis()
+        if (now - overlayDismissedTime < 600L) {
+            return
+        }
+        if (pendingDoomscrollTargetReel == reelId && pendingDoomscrollJob?.isActive == true) {
+            // Already scheduled and counting down for this exact reel, keep it running!
+            return
+        }
+
+        pendingDoomscrollTargetReel = reelId
         pendingDoomscrollJob?.cancel()
         pendingDoomscrollJob = scope.launch {
-            delay(3000L)
+            delay(500L) // Let the swipe animation settle before showing the dialog
             if (!checkIsOverlayShowing() && isDoomscrollingAlertEnabled) {
-                val root = rootInActiveWindow
+                val stillInReels = (currentAppPackage == "com.instagram.android")
+                if (!stillInReels || checkIsOverlayShowing() || !isDoomscrollingAlertEnabled) return@launch
+
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - overlayDismissedTime < 600L) {
+                    Log.d(TAG, "Overlay was dismissed recently, skipping overlay")
+                    return@launch
+                }
+
+                // Extract actual reel signature from the active screen!
+                val rootNode = rootInActiveWindow ?: return@launch
                 val screenHeight = applicationContext.resources.displayMetrics.heightPixels
                 val screenWidth = applicationContext.resources.displayMetrics.widthPixels
-                val rootPkg = root?.packageName?.toString() ?: currentAppPackage
-                val stillInReels = (rootPkg == "com.instagram.android" || currentAppPackage == "com.instagram.android") &&
-                    ((currentSection == "Reels") || (root?.let { isInstagramReelsScreen(it, screenWidth, screenHeight) } ?: true))
-                root?.recycle()
-                if (stillInReels && !checkIsOverlayShowing() && isDoomscrollingAlertEnabled) {
-                    lastReelsDoomscrollTriggerTime = System.currentTimeMillis()
-                    launchMindfulnessOverlay(packageName, "Reels")
+
+                // Live screen verification: Must be strictly Instagram Reels!
+                val isReels = isInstagramReelsScreen(rootNode, screenWidth, screenHeight) ||
+                    ((currentSection == "Reels" || lastSelectedBottomNavSection["com.instagram.android"] == "Reels")
+                     && !isInstagramNotificationsScreen(rootNode, emptyList(), "", "")
+                     && !isInstagramProfileScreen(rootNode, emptyList(), "", "")
+                     && !hasVisibleEditText(rootNode))
+
+                if (!isReels) {
+                    Log.d(TAG, "Active screen is not Instagram Reels. Aborting overlay.")
+                    rootNode.recycle()
+                    return@launch
                 }
+
+                var currentScreenSig = extractReelSignature(rootNode, screenWidth, screenHeight)
+                rootNode.recycle()
+
+                // If signature was not ready yet, retry once after 250ms
+                if (currentScreenSig.isEmpty()) {
+                    delay(250L)
+                    val retryRoot = rootInActiveWindow
+                    if (retryRoot != null) {
+                        if (!isInstagramReelsScreen(retryRoot, screenWidth, screenHeight)) {
+                            retryRoot.recycle()
+                            return@launch
+                        }
+                        currentScreenSig = extractReelSignature(retryRoot, screenWidth, screenHeight)
+                        retryRoot.recycle()
+                    }
+                }
+
+                // 1. Check if user is still on the inspired reel!
+                if (isInspirationActiveForCurrentReel) {
+                    val hasSwipedPast = reelScrollCounter > lastInspirationReelCounter
+                    val matchesInspiration = (currentScreenSig.isNotEmpty() && ignoredReelSignature.isNotEmpty() && isSameReel(currentScreenSig, ignoredReelSignature))
+
+                    if (!hasSwipedPast || matchesInspiration) {
+                        Log.d(TAG, "User still on inspiration reel (swipedPast=$hasSwipedPast, matchesInspiration=$matchesInspiration). Skipping overlay.")
+                        return@launch
+                    }
+
+                    // The user has swiped past the inspired reel to a new reel!
+                    Log.d(TAG, "User swiped past inspiration reel (counter=$reelScrollCounter > lastInspiration=$lastInspirationReelCounter). Clearing inspiration lock.")
+                    isInspirationActiveForCurrentReel = false
+                    ignoredReelSignature = ""
+                }
+
+                // 2. Check if current reel was EVER marked as inspiration in this session (e.g. scrolled back up to it)
+                if (currentScreenSig.isNotEmpty() && inspiredReelSignatures.any { isSameReel(it, currentScreenSig) }) {
+                    Log.d(TAG, "Current reel ($currentScreenSig) is in inspiredReelSignatures set. Skipping overlay.")
+                    return@launch
+                }
+
+                // 3. Prevent duplicate dialog on the SAME reel!
+                if (reelScrollCounter == lastDialogReelCounter && lastDialogReelCounter > 0L) {
+                    Log.d(TAG, "Already showed dialog for reel counter $reelScrollCounter. Skipping duplicate overlay.")
+                    return@launch
+                }
+                if (currentScreenSig.isNotEmpty() && lastDialogReelSignature.isNotEmpty() && isSameReel(currentScreenSig, lastDialogReelSignature)) {
+                    Log.d(TAG, "Current reel signature matches last dialog reel ($currentScreenSig). Skipping duplicate overlay.")
+                    return@launch
+                }
+                if (currentScreenSig.isNotEmpty() && shownDialogReelSignatures.any { isSameReel(it, currentScreenSig) }) {
+                    Log.d(TAG, "Current reel was already shown previously ($currentScreenSig). Skipping duplicate overlay.")
+                    return@launch
+                }
+
+                lastDialogReelCounter = reelScrollCounter
+                lastDialogReelSignature = currentScreenSig.ifEmpty { reelId }
+                activeReelSignature = currentScreenSig.ifEmpty { reelId }
+                lastReelsDoomscrollTriggerTime = System.currentTimeMillis()
+
+                Log.i(TAG, "Showing doomscrolling alert dialog for reel: ${lastDialogReelSignature.take(50)}")
+                launchMindfulnessOverlay(packageName, "Reels")
             }
         }
     }
@@ -1878,93 +2575,86 @@ class SmartTrackerService : AccessibilityService() {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // Mindfulness Check — works for both task-linked & distracting apps
+    // Mindfulness Check — Instagram-only doomscrolling alert
     // ═══════════════════════════════════════════════════════════════
 
     private suspend fun performMindfulnessCheck(packageName: String, section: String) {
-        // Do not show doomscrolling dialog if user has disabled the option
-        if (!isDoomscrollingAlertEnabled) return
-
-        // Don't fire while the overlay is already showing
-        if (checkIsOverlayShowing()) return
-
-        // Check cooldown for this specific app
-        val cooldownUntil = appMindfulnessCooldownUntil[packageName] ?: 0L
-        if (System.currentTimeMillis() < cooldownUntil) return
-
-        // ── Path 1: Task-linked apps (existing behavior) ──
-        val activeTaskId = TimerStateManager.activeTaskId.value
-        if (activeTaskId != -1 && TimerStateManager.isTimerRunning.value) {
-            val db = TodoDatabase.getDatabase(applicationContext, scope)
-            val activeTodo = db.todoDao().getAllTodos().first().find { it.id == activeTaskId }
-
-            if (activeTodo != null && activeTodo.associatedPackageNames?.split(",")?.contains(packageName) == true) {
-                // Ensure timer mode is set based on the task
-                TimerStateManager.isPomodoro.value = (activeTodo.timerMode == "Pomodoro")
-                val elapsedSinceSectionStart = System.currentTimeMillis() - currentSectionStartTime
-                if (elapsedSinceSectionStart > 5 * 60 * 1000L) {
-                    if (System.currentTimeMillis() < TimerStateManager.mindfulnessCooldownUntil) {
-                        return
-                    }
-                    Log.d(TAG, "Task-linked app: 5+ min in section '$section'. Showing overlay.")
-                    TimerStateManager.autoPauseTask(idle = true)
-                    commitCurrentSectionTime()
-                    launchMindfulnessOverlay(packageName, section)
-                    return
-                }
-            }
-        }
-
-        // ── Path 2: Distracting app (no task needed) ──
-        if (activeDistractingPackages.contains(packageName)) {
-            val distractingSections = DISTRACTING_SECTIONS[packageName]
-            val isDistracting = distractingSections?.contains(section) ?: true
-
-            if (isDistracting) {
-                val totalDistractingTime = getTotalDistractingTime(packageName)
-                if (totalDistractingTime > 5 * 60 * 1000L) {
-                    Log.d(TAG, "Distracting app $packageName: ${totalDistractingTime/1000}s in distracting sections. Showing overlay.")
-                    launchMindfulnessOverlay(packageName, section)
-                    return
-                }
-            }
-        }
+        // Doomscrolling alert dialog is strictly for Instagram Reels only.
+        // It must NEVER trigger in any other app or in non-Reels sections of Instagram (Home, Explore, etc.)
+        return
     }
 
     private fun launchMindfulnessOverlay(packageName: String, section: String) {
+        // Strict guard: doomscrolling overlay dialog is exclusively for Instagram Reels
+        if (packageName != "com.instagram.android" || section != "Reels") {
+            Log.d(TAG, "Ignoring MindfulnessOverlay: only allowed in Instagram Reels (got $packageName / $section)")
+            return
+        }
+
         // Do not show doomscrolling dialog if user has disabled the option
         if (!isDoomscrollingAlertEnabled) return
+
+        // Ensure Display over other apps (SYSTEM_ALERT_WINDOW) is permitted
+        if (!android.provider.Settings.canDrawOverlays(this)) {
+            Log.w(TAG, "Cannot launch MindfulnessOverlayActivity: SYSTEM_ALERT_WINDOW (Display over other apps) permission is NOT granted!")
+            return
+        }
 
         // Prevent double-launch
         if (checkIsOverlayShowing()) return
         isOverlayShowing = true
         overlayShownTime = System.currentTimeMillis()
 
-        // Set a minimum cooldown (30s) to prevent rapid re-triggering
-        // even before the user presses a button
+        // Set a minimum cooldown (30s) to prevent rapid re-triggering of performMindfulnessCheck
         appMindfulnessCooldownUntil[packageName] = System.currentTimeMillis() + 30_000L
 
         // Resolve a human-readable app name
         val appName = getAppDisplayName(packageName)
 
         // Overlay activity with separate taskAffinity ("")
-        val intent = Intent(applicationContext, com.goldenminute.catalyst.ui.MindfulnessOverlayActivity::class.java).apply {
+        val intent = Intent(this, com.goldenminute.catalyst.ui.MindfulnessOverlayActivity::class.java).apply {
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK
                 or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                or Intent.FLAG_ACTIVITY_NO_ANIMATION
             )
             putExtra("EXTRA_APP_NAME", appName)
             putExtra("EXTRA_SECTION_NAME", section)
             putExtra("EXTRA_PACKAGE_NAME", packageName)
+            putExtra("EXTRA_TOTAL_DOOMSCROLL_MS", currentSessionDoomscrollWastedMs)
+            putExtra("EXTRA_LANGUAGE", currentAppLanguage)
+            putExtra("EXTRA_SHOW_HIGH_PRIORITY_TASKS", false)
         }
+
+        val options = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            ActivityOptions.makeBasic().apply {
+                setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+            }.toBundle()
+        } else null
+
         try {
-            startActivity(intent)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && options != null) {
+                val pi = android.app.PendingIntent.getActivity(
+                    this,
+                    0,
+                    intent,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+                pi.send(this, 0, null, null, null, null, options)
+            } else {
+                startActivity(intent, options)
+            }
+            Log.d(TAG, "Successfully started MindfulnessOverlayActivity for $section in $packageName")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to launch MindfulnessOverlayActivity", e)
-            isOverlayShowing = false
-            overlayShownTime = 0L
+            try {
+                startActivity(intent)
+                Log.d(TAG, "Fallback direct startActivity succeeded for $section in $packageName")
+            } catch (e2: Exception) {
+                Log.e(TAG, "Failed to launch MindfulnessOverlayActivity", e2)
+                isOverlayShowing = false
+                overlayShownTime = 0L
+            }
         }
     }
 

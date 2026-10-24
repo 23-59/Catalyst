@@ -408,6 +408,8 @@
     <string name="section_filter_hint">Only track time in specific sections</string>
     <string name="close">Close</string>
     <string name="back">Back</string>
+    <string name="session_too_short_not_saved">Sessions under 1 minute are not recorded.</string>
+    <string name="timer_app_assigned_blocked">This task is linked to an external app. Open the app to track time.</string>
 
     <!-- Permissions Setup Onboarding -->
     <string name="permissions_setup_title">App Permissions</string>
@@ -429,6 +431,21 @@
     <string name="permission_granted">Granted</string>
     <string name="continue_to_app">Continue to Catalyst</string>
     <string name="skip_for_now">Skip for now</string>
+
+    <!-- Guided Permissions Flow -->
+    <string name="guided_step_indicator">Step %1$d of %2$d</string>
+    <string name="guided_accessibility_desc">In the next screen, tap \"Downloaded apps\" (or \"Installed services\"), find \"Catalyst\", and switch it ON.</string>
+    <string name="guided_overlay_desc">In the next screen, find \"Catalyst\" and turn on \"Allow display over other apps\".</string>
+    <string name="guided_exact_alarm_desc">In the next screen, turn on \"Allow setting alarms and reminders\" so your task alerts trigger on time.</string>
+    <string name="guided_notifications_desc">In the next screen, turn on notifications for Catalyst.</string>
+    <string name="guided_mic_desc">Microphone permission is needed for voice task creation. Please tap below to allow microphone access in app settings.</string>
+    <string name="guided_battery_desc">In the prompt, choose \"Allow\" so Catalyst can run in the background without timers being paused.</string>
+    <string name="guided_open_settings">Go to Settings</string>
+    <string name="guided_skip_step">Skip this step</string>
+    <string name="guided_try_again">Try Again</string>
+    <string name="guided_not_enabled_warning">This permission was not enabled yet.</string>
+    <string name="all_permissions_granted_toast">All permissions have been granted!</string>
+    <string name="open_app_settings">Open App Settings</string>
 
     <!-- Session History Screen -->
     <string name="session_history_title">Session History</string>
@@ -452,6 +469,8 @@
     <string name="delete_session_confirm">Are you sure you want to delete this session record?</string>
     <string name="assigned_app_indicator">Assigned App</string>
     <string name="linked_app">Linked App</string>
+    <string name="doomscrolling_settings_title">Instagram Doomscrolling Alert</string>
+    <string name="doomscrolling_settings_desc">Detect mindless scrolling on Instagram and show a mindfulness dialog to help you stay aware</string>
     <string name="doomscrolling_alert_title">Doomscrolling Alert Dialog</string>
     <string name="doomscrolling_alert_desc">Recognize Instagram Reels scrolling and show mindfulness check</string>
     <string name="doomscrolling_stats_summary">%1$d videos • %2$s</string>
@@ -462,6 +481,165 @@
     <string name="doomscrolling_avg_time">Avg Time / Video</string>
     <string name="doomscrolling_history_title">Recorded Videos History</string>
     <string name="doomscrolling_no_records">No doomscrolling videos recorded yet</string>
+    <string name="doomscrolling_day_total">Day total</string>
+    <string name="doomscrolling_sessions_count">%1$d sessions</string>
     <string name="clear_history">Clear History</string>
     <string name="clear_history_confirm">Are you sure you want to clear doomscrolling history?</string>
+
+    <!-- Session History & Split / Reconstruct -->
+    <string name="reconstruct_daily_sessions">Restore Daily Sessions</string>
+    <string name="reconstruct_daily_sessions_desc">Detected activity across multiple days. Tap to split this combined session into individual daily sessions.</string>
+    <string name="reconstruct_success">Restored %1$d daily sessions successfully.</string>
+    <string name="split_session_title">Split Session Across Days</string>
+    <string name="split_session_desc">Distribute this combined session into multiple daily sessions.</string>
+    <string name="split_days_count">%1$d Days</string>
+    <string name="split_daily_preview">~%1$s per day</string>
+    <string name="split_action">Split Session</string>
+    <string name="split_success">Session split across %1$d days.</string>
+    <string name="split_from_activity">Restore from activity history (%1$d days detected)</string>
+    <string name="split_tooltip">Split across days</string>
+
+    <string name="doomscroll_warning_title">⚠️ Doomscrolling Alert</string>
+    <string name="doomscroll_warning_subtitle">You\'ve been endlessly scrolling Reels</string>
+    <string name="doomscroll_warning_time_label">Time spent scrolling</string>
+    <string name="doomscroll_warning_question">Is this how you want to spend your time?</string>
+    <string name="doomscroll_btn_intentional">I\'m Being Intentional</string>
+    <string name="doomscroll_btn_doomscrolling">I\'m Doomscrolling</string>
+    <string name="doomscroll_encouragement_title">Stay focused on what matters!</string>
+    <string name="doomscroll_encouragement_desc">You acknowledged you\'re doomscrolling. Don\'t let the algorithm steal your day—your most important tasks are waiting for you!</string>
+    <string name="doomscroll_high_priority_tasks">High Priority Tasks</string>
+    <string name="doomscroll_start_focus">Start Focusing</string>
+    <string name="doomscroll_no_tasks">No pending tasks. Create one in Catalyst to stay on track!</string>
+    <string name="doomscroll_create_task">Open Catalyst</string>
+    <string name="doomscroll_dismiss_later">Dismiss for Now</string>
+    <string name="doomscroll_got_it">Got it</string>
+    <string name="high_priority_badge">High Priority</string>
+
+    <!-- NFC Feature -->
+    <string name="nfc_section_title">NFC Card Data Transfer</string>
+    <string name="nfc_section_subtitle">Backup &amp; sync via NFC tags</string>
+    <string name="nfc_section_desc">Read and write tasks, notes, or backups using physical NFC cards or tags.</string>
+    <string name="nfc_status_ready">NFC Ready</string>
+    <string name="nfc_status_disabled">NFC Disabled</string>
+    <string name="nfc_status_unsupported">NFC Not Supported</string>
+    <string name="nfc_btn_enable">Enable NFC</string>
+    <string name="nfc_btn_write">Write to NFC</string>
+    <string name="nfc_btn_read">Read from NFC</string>
+    <string name="nfc_write_card_desc">Save priority tasks or full backup to card</string>
+    <string name="nfc_read_card_desc">Preview and restore data from card</string>
+    <string name="nfc_write_dialog_title">Write to NFC Card</string>
+    <string name="nfc_read_dialog_title">Read from NFC Card</string>
+    <string name="nfc_select_payload_title">Select Data to Write</string>
+    <string name="nfc_mode_quick">Quick Focus Tasks</string>
+    <string name="nfc_mode_quick_desc">Top active priorities (~200–350B, fits all tags)</string>
+    <string name="nfc_mode_custom">Custom Selection</string>
+    <string name="nfc_mode_custom_desc">Choose specific tasks and notes</string>
+    <string name="nfc_mode_full">Full App Backup</string>
+    <string name="nfc_mode_full_desc">All tasks &amp; notes compressed with GZIP</string>
+    <string name="nfc_payload_size_badge">Payload Size: %1$d bytes</string>
+    <string name="nfc_tag_fit_hint_ntag213">Fits on NTAG213 (144B)+</string>
+    <string name="nfc_tag_fit_hint_ntag215">Fits on NTAG215 (504B)+</string>
+    <string name="nfc_tag_fit_hint_ntag216">Requires NTAG216 (888B) or larger card</string>
+    <string name="nfc_tap_prompt_write">Hold device near NFC card to write...</string>
+    <string name="nfc_tap_prompt_read">Hold device near NFC card to read...</string>
+    <string name="nfc_writing_in_progress">Writing to card, hold still...</string>
+    <string name="nfc_reading_in_progress">Reading from card, hold still...</string>
+    <string name="nfc_write_success">Data written to NFC card successfully!</string>
+    <string name="nfc_read_success">NFC card read successfully!</string>
+    <string name="nfc_err_readonly">This card is write-protected or read-only.</string>
+    <string name="nfc_err_insufficient_space">Insufficient space: Data needs %1$d bytes, tag has %2$d bytes.</string>
+    <string name="nfc_err_tag_lost">Connection lost during transfer. Please try again and hold still.</string>
+    <string name="nfc_err_no_catalyst_data">No valid Catalyst data found on this tag.</string>
+    <string name="nfc_err_general">NFC transfer error: %1$s</string>
+    <string name="nfc_preview_title">Card Content Preview</string>
+    <string name="nfc_preview_tasks_count">%1$d Tasks</string>
+    <string name="nfc_preview_notes_count">%1$d Notes</string>
+    <string name="nfc_preview_categories_count">%1$d Categories</string>
+    <string name="nfc_action_merge">Merge (Keep Existing)</string>
+    <string name="nfc_action_restore">Restore (Overwrite)</string>
+    <string name="nfc_restore_confirm_title">Overwrite All Current Data?</string>
+    <string name="nfc_restore_confirm_desc">This will replace your current tasks, categories, and notes with the data from the NFC card.</string>
+    <string name="nfc_retry">Try Again</string>
+    <string name="nfc_empty_selection">No items selected to write.</string>
+
+    <!-- Power Button Quick Access Feature -->
+    <string name="power_button_shortcut_title">Power Button Quick Access</string>
+    <string name="power_button_shortcut_desc">Instantly view your urgent high-priority tasks by pressing or holding your phone\'s physical power button outside of Catalyst.</string>
+    <string name="power_shortcut_off">Disabled</string>
+    <string name="power_shortcut_off_desc">Shortcut is turned off</string>
+    <string name="power_shortcut_double_press">Double Press Power</string>
+    <string name="power_shortcut_double_press_desc">Replaces camera shortcut with Catalyst urgent tasks</string>
+    <string name="power_shortcut_long_press">Long Press Power</string>
+    <string name="power_shortcut_long_press_desc">Replaces digital assistant or power menu with Catalyst</string>
+    <string name="power_shortcut_hint_double">Configure your phone\'s side button to open Catalyst on double press:</string>
+    <string name="power_shortcut_hint_long">Configure your phone to show Catalyst instead of the power menu or assistant on long press:</string>
+    <string name="power_shortcut_accessibility_required">Requires Smart Tracker accessibility service to be enabled.</string>
+    <string name="power_shortcut_enable_accessibility">Enable Smart Service</string>
+    <string name="quick_tasks_title">High Priority Tasks</string>
+    <string name="quick_tasks_subtitle">Your top urgent priorities</string>
+    <string name="quick_tasks_empty">All high priority tasks completed!</string>
+    <string name="quick_tasks_empty_sub">Great job! Enjoy your headspace or add more in Catalyst.</string>
+    <string name="quick_tasks_open_app">Open Catalyst</string>
+    <string name="quick_tasks_focus_btn">Start Focus</string>
+    <string name="quick_tasks_completed_toast">Task completed!</string>
+    <string name="quick_tab_tasks">Tasks</string>
+    <string name="quick_tab_notes">Notes</string>
+    <string name="quick_notes_title">Quick Notes</string>
+    <string name="quick_notes_subtitle">Your recent thoughts and notes</string>
+    <string name="quick_notes_empty">No notes yet!</string>
+    <string name="quick_notes_empty_sub">Capture your thoughts or ideas right here.</string>
+    <string name="quick_add_task_btn">New Task</string>
+    <string name="quick_add_note_btn">New Note</string>
+    <string name="quick_tasks_saved_toast">Task saved successfully!</string>
+    <string name="quick_notes_saved_toast">Note saved successfully!</string>
+    <string name="quick_note_untitled">Untitled Note</string>
+    <string name="power_shortcut_active">Active</string>
+    <string name="power_shortcut_open_phone_settings">Open Side Button Settings</string>
+    <string name="power_shortcut_open_phone_settings_desc">Configure your phone\'s side button in System Settings:</string>
+    <string name="power_shortcut_hint_double_native">On Samsung: Settings → Advanced features → Side button → Double press → Open app → Catalyst.\nOn Xiaomi: Settings → Additional settings → Gesture shortcuts.\nOn other phones: Double-press power replaces the default camera shortcut.</string>
+    <string name="power_shortcut_hint_long_native">Set Catalyst as your Default Digital Assistant so holding the power button immediately opens your urgent tasks everywhere.</string>
+    <string name="power_shortcut_set_default_assistant">Set as Default Assistant</string>
+    <string name="power_shortcut_overlay_permission_title">Display Over Other Apps</string>
+    <string name="power_shortcut_overlay_permission_desc">Allow Catalyst to appear over other apps and lock screen when triggered.</string>
+    <string name="power_shortcut_grant_permission">Grant Permission</string>
+    <string name="power_shortcut_test_btn">Preview Popup</string>
+    <string name="power_shortcut_disabled_toast">Power button shortcut disabled</string>
+    <string name="power_shortcut_disabled_info_title">Shortcut Turned Off</string>
+    <string name="power_shortcut_disabled_info_desc">Catalyst shortcuts are disabled. If you previously set Catalyst as your phone\'s default digital assistant or side key action, you can restore Google or your default assistant in settings.</string>
+    <string name="power_shortcut_restore_assistant">Phone Assistant Settings</string>
+
+    <!-- Redesigned NFC Write Dialog Strings -->
+    <string name="nfc_write_dialog_subtitle">Choose the data you want to store on your NFC card or sticker.</string>
+    <string name="nfc_data_size_label">Estimated Data Size</string>
+    <string name="nfc_btn_continue_write">Next: Scan Card</string>
+    <string name="nfc_step_scan_title">Ready to Write</string>
+    <string name="nfc_step_scan_desc">Hold the back of your phone steady against the NFC card or sticker.</string>
+    <string name="nfc_do_not_move">Keep device still during transfer</string>
+    <string name="nfc_write_success_title">Card Written Successfully!</string>
+    <string name="nfc_write_success_desc">Your selected data has been stored on the NFC card.</string>
+    <string name="nfc_write_error_title">Write Transfer Failed</string>
+
+    <!-- Redesigned Custom AI Prompts Strings -->
+    <string name="custom_ai_prompts_desc">Customize system instructions for AI analysis &amp; daily digests</string>
+    <string name="intelligence_hub_prompt_desc">Guides productivity analysis, weekly trends, and recommendations</string>
+    <string name="daily_digest_prompt_desc">Guides the end-of-day productivity summary and achievements</string>
+    <string name="prompt_status_custom">Custom</string>
+    <string name="prompt_status_default">Default</string>
+    <string name="reset_to_default_btn">Reset to Default</string>
+    <string name="prompt_variables_title">Insert Variables</string>
+    <string name="prompt_saved">Prompt saved successfully</string>
+    <string name="prompt_reset">Reset to default prompt</string>
+    <string name="tap_to_expand_prompt">Tap to view or edit prompt</string>
+
+    <!-- Floating Task Bar Feature -->
+    <string name="floating_task_bar_title">Floating Task Bar</string>
+    <string name="floating_task_bar_desc">Pin this task on your screen over other apps so you don\'t forget what to do</string>
+    <string name="floating_task_bar_active">Showing in Floating Bar</string>
+    <string name="floating_task_bar_close">Close floating bar</string>
+    <string name="floating_task_bar_permission_required">Please grant permission to display over other apps to show the floating bar.</string>
+    <string name="floating_task_bar_completed">Task completed!</string>
+    <string name="floating_task_bar_open">Open Task</string>
+    <string name="floating_task_bar_minimize">Minimize bar</string>
+    <string name="floating_task_bar_expand">Expand box</string>
 </resources>
+

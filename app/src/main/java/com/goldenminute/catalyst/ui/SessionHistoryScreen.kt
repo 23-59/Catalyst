@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.CallSplit
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,7 +52,8 @@ fun SessionHistoryScreen(
     todo: TodoItem,
     onBack: () -> Unit,
     onDeleteRecord: (Int) -> Unit, // original index of record in todo.recordedTimes
-    isPersian: Boolean = false
+    isPersian: Boolean = false,
+    viewModel: TodoViewModel? = null
 ) {
     val currentContext = androidx.compose.ui.platform.LocalContext.current
     val currentLocaleLang = currentContext.resources.configuration.locales[0].language
@@ -136,8 +138,37 @@ fun SessionHistoryScreen(
     }
 
     val appPackage = remember(todo.associatedPackageNames) {
-        todo.associatedPackageNames?.split(",")?.firstOrNull { it.isNotBlank() }
+        todo.associatedPackageNames
     }
+
+    val doomscrollRecords = viewModel?.doomscrollRecords?.collectAsState()?.value ?: emptyList()
+
+    val daysWithDoomscroll = remember(doomscrollRecords, appPackage) {
+        if (appPackage.isNullOrEmpty()) emptyList()
+        else {
+            val matching = doomscrollRecords.filter {
+                appPackage.contains(it.packageName, ignoreCase = true) || it.packageName.contains("instagram", ignoreCase = true)
+            }
+            matching.groupBy { rec ->
+                Calendar.getInstance().apply {
+                    timeInMillis = rec.timestamp
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+            }.keys.toList()
+        }
+    }
+
+    val canRestoreFromDoomscroll = remember(allRecords, daysWithDoomscroll) {
+        daysWithDoomscroll.size >= 2 &&
+            allRecords.count { !it.record.isPomodoro } <= 2 &&
+            allRecords.any { !it.record.isPomodoro && it.record.value >= 10 * 60 * 1000L }
+    }
+
+    var recordToSplit by remember { mutableStateOf<SessionRecordIndexed?>(null) }
+    var splitDaysCount by remember { mutableStateOf(3) }
 
     val unifiedSections = remember(filteredRecords) {
         val map = mutableMapOf<String, Long>()
@@ -184,6 +215,24 @@ fun SessionHistoryScreen(
                             contentDescription = stringResource(R.string.back),
                             tint = TextPrimary
                         )
+                    }
+                },
+                actions = {
+                    if (allRecords.any { !it.record.isPomodoro && it.record.value >= 10 * 60 * 1000L }) {
+                        IconButton(
+                            onClick = {
+                                val largest = allRecords.filter { !it.record.isPomodoro }.maxByOrNull { it.record.value }
+                                if (largest != null) {
+                                    recordToSplit = largest
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.CallSplit,
+                                contentDescription = stringResource(R.string.split_session_title),
+                                tint = NeonCyan
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -244,6 +293,85 @@ fun SessionHistoryScreen(
                         color = Color(0xFF10B981),
                         modifier = Modifier.weight(1f)
                     )
+                }
+            }
+
+            // 1.5 Reconstruct Banner (if multiple days of activity detected for a combined session)
+            if (canRestoreFromDoomscroll) {
+                item(key = "reconstruct_activity_banner") {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = SlateDark.copy(alpha = 0.95f)),
+                        border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(NeonCyan.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = NeonCyan,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.reconstruct_daily_sessions),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.reconstruct_daily_sessions_desc),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary,
+                                        lineHeight = 18.sp
+                                    )
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    viewModel?.reconstructSessionsFromActivity(todo.id) { success, count ->
+                                        if (success) {
+                                            val msg = currentContext.getString(R.string.reconstruct_success, count)
+                                            android.widget.Toast.makeText(currentContext, msg, android.widget.Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = NeonCyan,
+                                    contentColor = ObsidianBlack
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoFixHigh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = stringResource(R.string.reconstruct_daily_sessions),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -423,6 +551,7 @@ fun SessionHistoryScreen(
                             sessionItem = item,
                             isPersian = effectiveIsPersian,
                             onDelete = { recordToDelete = item },
+                            onSplit = { recordToSplit = item },
                             packageName = appPackage
                         )
                     }
@@ -458,6 +587,184 @@ fun SessionHistoryScreen(
             },
             dismissButton = {
                 TextButton(onClick = { recordToDelete = null }) {
+                    Text(stringResource(R.string.cancel), color = TextSecondary)
+                }
+            },
+            containerColor = SlateDark,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
+    // Split session dialog
+    if (recordToSplit != null) {
+        val targetItem = recordToSplit!!
+        val targetRecord = targetItem.record
+        AppAlertDialog(
+            onDismissRequest = { recordToSplit = null },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.CallSplit,
+                        contentDescription = null,
+                        tint = NeonCyan,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        stringResource(R.string.split_session_title),
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.split_session_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+
+                    // Total session duration card
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = SlateLight.copy(alpha = 0.5f),
+                        border = BorderStroke(0.5.dp, BorderColor.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                stringResource(R.string.longest_session),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary
+                            )
+                            Text(
+                                formatDuration(targetRecord.value, effectiveIsPersian),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = NeonCyan
+                            )
+                        }
+                    }
+
+                    // Days selector
+                    Text(
+                        stringResource(R.string.split_days_count, splitDaysCount).let {
+                            if (effectiveIsPersian) JalaliCalendarHelper.toPersianDigits(it) else it
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(2, 3, 4, 5, 7).forEach { days ->
+                            val isSelected = (splitDaysCount == days)
+                            val label = if (effectiveIsPersian) "${JalaliCalendarHelper.toPersianDigits(days.toString())} روز" else "${days}d"
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { splitDaysCount = days },
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) NeonCyan.copy(alpha = 0.2f) else SlateDark,
+                                border = BorderStroke(1.dp, if (isSelected) NeonCyan else BorderColor.copy(alpha = 0.2f))
+                            ) {
+                                Box(
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) NeonCyan else TextSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Live preview
+                    val previewTime = formatDuration(targetRecord.value / splitDaysCount, effectiveIsPersian)
+                    Text(
+                        stringResource(R.string.split_daily_preview, previewTime),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NeonPurple,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    // Optional: Reconstruct from activity history if available
+                    if (daysWithDoomscroll.size >= 2) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel?.reconstructSessionsFromActivity(todo.id) { success, count ->
+                                    if (success) {
+                                        val msg = currentContext.getString(R.string.reconstruct_success, count)
+                                        android.widget.Toast.makeText(currentContext, msg, android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                                recordToSplit = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = NeonCyan,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(R.string.split_from_activity, daysWithDoomscroll.size).let {
+                                    if (effectiveIsPersian) JalaliCalendarHelper.toPersianDigits(it) else it
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = NeonCyan
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val recIndex = targetItem.originalIndex
+                        viewModel?.splitSessionIntoDays(todo.id, recIndex, splitDaysCount) { success ->
+                            if (success) {
+                                val msg = currentContext.getString(R.string.split_success, splitDaysCount)
+                                android.widget.Toast.makeText(currentContext, msg, android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        recordToSplit = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = ObsidianBlack),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.split_action),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { recordToSplit = null }) {
                     Text(stringResource(R.string.cancel), color = TextSecondary)
                 }
             },
@@ -580,6 +887,7 @@ private fun SessionRecordCard(
     sessionItem: SessionRecordIndexed,
     isPersian: Boolean,
     onDelete: () -> Unit,
+    onSplit: () -> Unit = {},
     packageName: String? = null
 ) {
     val record = sessionItem.record
@@ -663,6 +971,20 @@ private fun SessionRecordCard(
                         fontWeight = FontWeight.Bold,
                         color = themeColor
                     )
+
+                    if (!isPomodoro && record.value >= 5 * 60 * 1000L) {
+                        IconButton(
+                            onClick = onSplit,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.CallSplit,
+                                contentDescription = stringResource(R.string.split_action),
+                                tint = NeonCyan.copy(alpha = 0.85f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
 
                     IconButton(
                         onClick = onDelete,

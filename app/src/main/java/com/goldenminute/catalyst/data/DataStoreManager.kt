@@ -4,10 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.flow.first
+
 
 val Context.appDataStore: DataStore<Preferences> by preferencesDataStore(name = "app_settings")
 val Context.timerDataStore: DataStore<Preferences> by preferencesDataStore(name = "timer_prefs")
@@ -29,6 +26,7 @@ object DataStoreKeys {
     val DOOMSCROLLING_ALERT_ENABLED = booleanPreferencesKey("doomscrolling_alert_enabled")
     val DAILY_FOCUS_GOAL_HOURS = floatPreferencesKey("daily_focus_goal_hours")
     val FREE_MODE_SESSIONS = stringPreferencesKey("free_mode_sessions")
+    val POWER_BUTTON_SHORTCUT_MODE = stringPreferencesKey("power_button_shortcut_mode")
 
     val FOCUS_LENGTH = longPreferencesKey("focus_length")
     val SHORT_BREAK_LENGTH = longPreferencesKey("short_break_length")
