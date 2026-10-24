@@ -14,6 +14,8 @@ class BootReceiver : BroadcastReceiver() {
             intent.action == Intent.ACTION_TIMEZONE_CHANGED || 
             intent.action == Intent.ACTION_TIME_CHANGED) {
             
+            com.goldenminute.catalyst.service.PowerButtonShortcutManager.init(context)
+
             val scope = CoroutineScope(Dispatchers.IO)
             val db = TodoDatabase.getDatabase(context, scope)
             scope.launch {

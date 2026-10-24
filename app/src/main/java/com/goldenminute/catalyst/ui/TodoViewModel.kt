@@ -83,7 +83,8 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
 
                 val apps = prefs[DataStoreKeys.DISTRACTING_APPS]
                 distractingApps.value = apps ?: com.goldenminute.catalyst.service.SmartTrackerService.DEFAULT_DISTRACTING_PACKAGES
-                doomscrollingAlertEnabled.value = prefs[DataStoreKeys.DOOMSCROLLING_ALERT_ENABLED] ?: false
+                doomscrollingAlertEnabled.value = prefs[DataStoreKeys.DOOMSCROLLING_ALERT_ENABLED] ?: true
+                powerButtonShortcutMode.value = prefs[DataStoreKeys.POWER_BUTTON_SHORTCUT_MODE] ?: "none"
 
                 TimerStateManager.initialize(getApplication())
                 TimerStateManager.focusLength.value = prefs[DataStoreKeys.FOCUS_LENGTH] ?: (25 * 60 * 1000L)
@@ -143,7 +144,7 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     val freeModeSessions = MutableStateFlow("")
 
     val distractingApps = MutableStateFlow<Set<String>>(com.goldenminute.catalyst.service.SmartTrackerService.DEFAULT_DISTRACTING_PACKAGES)
-    val doomscrollingAlertEnabled = MutableStateFlow(false)
+    val doomscrollingAlertEnabled = MutableStateFlow(true)
 
     fun setDistractingApps(apps: Set<String>) {
         viewModelScope.launch { getApplication<Application>().appDataStore.edit { it[DataStoreKeys.DISTRACTING_APPS] = apps } }
@@ -157,6 +158,17 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         doomscrollingAlertEnabled.value = enabled
+    }
+
+    val powerButtonShortcutMode = MutableStateFlow("none")
+
+    fun setPowerButtonShortcutMode(mode: String) {
+        viewModelScope.launch {
+            getApplication<Application>().appDataStore.edit {
+                it[DataStoreKeys.POWER_BUTTON_SHORTCUT_MODE] = mode
+            }
+        }
+        powerButtonShortcutMode.value = mode
     }
 
     val doomscrollRecords: StateFlow<List<com.goldenminute.catalyst.data.DoomscrollVideoRecord>> =
@@ -196,6 +208,9 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addFreeModeFocusSession(record: com.goldenminute.catalyst.data.RecordedTimeItem) {
+        if (!record.isPomodoro && record.value <= 60_000L) {
+            return
+        }
         viewModelScope.launch {
             val currentList = com.goldenminute.catalyst.data.RecordedTimeItem.parseList(freeModeSessions.value).toMutableList()
             currentList.add(record)
@@ -219,13 +234,15 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 addSessionRecords(todo.id, listOf(newRecord))
             } else {
-                if (elapsed > 0) {
+                if (elapsed > 60_000L) {
                     val newRecord = com.goldenminute.catalyst.data.RecordedTimeItem(
                         isPomodoro = false,
                         value = elapsed,
                         timestamp = System.currentTimeMillis()
                     )
                     addSessionRecords(todo.id, listOf(newRecord))
+                } else {
+                    android.widget.Toast.makeText(context, context.getString(com.goldenminute.catalyst.R.string.session_too_short_not_saved), android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
         } else if (TimerStateManager.isIdleMode.value) {
@@ -236,17 +253,20 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                     timestamp = System.currentTimeMillis()
                 )
                 addFreeModeFocusSession(newRecord)
+                android.widget.Toast.makeText(context, context.getString(com.goldenminute.catalyst.R.string.free_focus_session_saved), android.widget.Toast.LENGTH_SHORT).show()
             } else {
-                if (elapsed > 0) {
+                if (elapsed > 60_000L) {
                     val newRecord = com.goldenminute.catalyst.data.RecordedTimeItem(
                         isPomodoro = false,
                         value = elapsed,
                         timestamp = System.currentTimeMillis()
                     )
                     addFreeModeFocusSession(newRecord)
+                    android.widget.Toast.makeText(context, context.getString(com.goldenminute.catalyst.R.string.free_focus_session_saved), android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    android.widget.Toast.makeText(context, context.getString(com.goldenminute.catalyst.R.string.session_too_short_not_saved), android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
-            android.widget.Toast.makeText(context, context.getString(com.goldenminute.catalyst.R.string.free_focus_session_saved), android.widget.Toast.LENGTH_SHORT).show()
         }
         
         TimerStateManager.isTimerRunning.value = false
@@ -797,6 +817,164 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun reconstructSessionsFromActivity(todoId: Int, onResult: (Boolean, Int) -> Unit = { _, _ -> }) {
+        viewModelScope.launch {
+            try {
+                val todo = repository.getTodoById(todoId) ?: run {
+                    onResult(false, 0)
+                    return@launch
+                }
+                val existingList = com.goldenminute.catalyst.data.RecordedTimeItem.parseList(todo.recordedTimes).toMutableList()
+                if (existingList.isEmpty()) {
+                    onResult(false, 0)
+                    return@launch
+                }
+
+                // Check doomscroll videos activity
+                val allDoomRecords = repository.allDoomscrollRecords.first()
+                val pkgName = todo.associatedPackageNames ?: "com.instagram.android"
+                val matchingRecords = allDoomRecords.filter {
+                    pkgName.contains(it.packageName, ignoreCase = true) || it.packageName.contains("instagram", ignoreCase = true)
+                }
+
+                if (matchingRecords.isEmpty()) {
+                    onResult(false, 0)
+                    return@launch
+                }
+
+                val recordsByDay = matchingRecords.groupBy { rec ->
+                    Calendar.getInstance().apply {
+                        timeInMillis = rec.timestamp
+                        set(Calendar.HOUR_OF_DAY, 0)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }.timeInMillis
+                }.toSortedMap()
+
+                if (recordsByDay.size < 2) {
+                    onResult(false, 0)
+                    return@launch
+                }
+
+                val nonPomRecords = existingList.filter { !it.isPomodoro }
+                val pomRecords = existingList.filter { it.isPomodoro }
+                val totalNonPomTime = nonPomRecords.sumOf { it.value }
+
+                if (totalNonPomTime <= 0L) {
+                    onResult(false, 0)
+                    return@launch
+                }
+
+                val combinedSections = mutableMapOf<String, Long>()
+                for (rec in nonPomRecords) {
+                    for ((sec, time) in rec.appSections) {
+                        combinedSections[sec] = (combinedSections[sec] ?: 0L) + time
+                    }
+                }
+
+                val totalDoomMs = recordsByDay.values.sumOf { list -> list.sumOf { it.durationMs } }
+                val reconstructedList = mutableListOf<com.goldenminute.catalyst.data.RecordedTimeItem>()
+                var accumulatedTime = 0L
+                val dayEntries = recordsByDay.entries.toList()
+
+                dayEntries.forEachIndexed { idx, (dayStartMs, dayVideos) ->
+                    val dayDoomMs = dayVideos.sumOf { it.durationMs }
+                    val ratio = if (totalDoomMs > 0) dayDoomMs.toDouble() / totalDoomMs.toDouble() else (1.0 / dayEntries.size)
+                    val isLast = (idx == dayEntries.lastIndex)
+
+                    val dayTime = if (isLast) {
+                        (totalNonPomTime - accumulatedTime).coerceAtLeast(30_000L)
+                    } else {
+                        (totalNonPomTime * ratio).toLong().coerceAtLeast(30_000L)
+                    }
+                    accumulatedTime += dayTime
+
+                    val daySections = if (combinedSections.isNotEmpty()) {
+                        combinedSections.mapValues { (_, v) -> (v * ratio).toLong().coerceAtLeast(10_000L) }
+                    } else {
+                        emptyMap()
+                    }
+
+                    val dayTimestamp = dayVideos.maxOf { it.timestamp }
+                    reconstructedList.add(
+                        com.goldenminute.catalyst.data.RecordedTimeItem(
+                            isPomodoro = false,
+                            value = dayTime,
+                            timestamp = dayTimestamp,
+                            appSections = daySections
+                        )
+                    )
+                }
+
+                val finalRecords = (pomRecords + reconstructedList).sortedBy { it.timestamp }
+                val updatedTodo = todo.copy(
+                    recordedTimes = com.goldenminute.catalyst.data.RecordedTimeItem.serializeList(finalRecords)
+                )
+                repository.updateTodo(updatedTodo)
+                onResult(true, reconstructedList.size)
+            } catch (e: Exception) {
+                android.util.Log.e("TodoViewModel", "Error reconstructing sessions from activity", e)
+                onResult(false, 0)
+            }
+        }
+    }
+
+    fun splitSessionIntoDays(todoId: Int, recordIndex: Int, numberOfDays: Int, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val todo = repository.getTodoById(todoId) ?: run {
+                    onResult(false)
+                    return@launch
+                }
+                val existingList = com.goldenminute.catalyst.data.RecordedTimeItem.parseList(todo.recordedTimes).toMutableList()
+                if (recordIndex !in existingList.indices || numberOfDays !in 2..14) {
+                    onResult(false)
+                    return@launch
+                }
+
+                val target = existingList[recordIndex]
+                val dailyTime = target.value / numberOfDays
+                val replacementRecords = mutableListOf<com.goldenminute.catalyst.data.RecordedTimeItem>()
+                var runningAssigned = 0L
+
+                for (i in (numberOfDays - 1) downTo 0) {
+                    val dayCal = Calendar.getInstance().apply {
+                        timeInMillis = target.timestamp
+                        add(Calendar.DAY_OF_YEAR, -i)
+                    }
+                    val isLast = (i == 0)
+                    val partValue = if (isLast) target.value - runningAssigned else dailyTime
+                    runningAssigned += partValue
+
+                    val dailySections = target.appSections.mapValues { (_, v) -> v / numberOfDays }
+
+                    replacementRecords.add(
+                        com.goldenminute.catalyst.data.RecordedTimeItem(
+                            isPomodoro = target.isPomodoro,
+                            value = partValue,
+                            timestamp = dayCal.timeInMillis,
+                            appSections = dailySections
+                        )
+                    )
+                }
+
+                existingList.removeAt(recordIndex)
+                existingList.addAll(recordIndex, replacementRecords)
+                val finalSorted = existingList.sortedBy { it.timestamp }
+
+                val updatedTodo = todo.copy(
+                    recordedTimes = com.goldenminute.catalyst.data.RecordedTimeItem.serializeList(finalSorted)
+                )
+                repository.updateTodo(updatedTodo)
+                onResult(true)
+            } catch (e: Exception) {
+                android.util.Log.e("TodoViewModel", "Error splitting session into days", e)
+                onResult(false)
+            }
+        }
+    }
+
     fun toggleTodoCompleted(todoId: Int, isCompleted: Boolean) {
         viewModelScope.launch {
             val completedDate = if (isCompleted) System.currentTimeMillis() else null
@@ -1024,6 +1202,113 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     onResult(false)
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onResult(false)
+            }
+        }
+    }
+
+    fun buildQuickNfcPayload(): com.goldenminute.catalyst.nfc.NfcPayload {
+        val uncompleted = allTodosList.value
+            .filter { !it.isCompleted }
+            .sortedWith(compareByDescending<TodoItem> { it.priority }.thenBy { it.dueDate ?: Long.MAX_VALUE })
+            .take(5)
+
+        val usedCategoryIds = uncompleted.mapNotNull { it.categoryId }.toSet()
+        val relevantCategories = categories.value.filter { usedCategoryIds.contains(it.id) }
+
+        val todoIds = uncompleted.map { it.id }.toSet()
+        val relevantSubTasks = allSubTasks.value.filter { todoIds.contains(it.todoId) }
+
+        return com.goldenminute.catalyst.nfc.NfcPayload(
+            version = 1,
+            type = "quick_tasks",
+            timestamp = System.currentTimeMillis(),
+            categories = relevantCategories,
+            todos = uncompleted,
+            subTasks = relevantSubTasks,
+            notes = emptyList()
+        )
+    }
+
+    fun buildCustomNfcPayload(
+        selectedCategoryIds: Set<Int>,
+        selectedTodoIds: Set<Int>,
+        selectedSubTaskIds: Set<Int>,
+        selectedNoteIds: Set<Int>,
+        isFull: Boolean = false
+    ): com.goldenminute.catalyst.nfc.NfcPayload {
+        val cats = categories.value.filter { selectedCategoryIds.contains(it.id) }
+        val todos = allTodosList.value.filter { selectedTodoIds.contains(it.id) }
+        val subTasks = allSubTasks.value.filter { selectedSubTaskIds.contains(it.id) }
+        val notes = allNotes.value.filter { selectedNoteIds.contains(it.id) }
+
+        return com.goldenminute.catalyst.nfc.NfcPayload(
+            version = 1,
+            type = if (isFull) "full_backup" else "custom",
+            timestamp = System.currentTimeMillis(),
+            categories = cats,
+            todos = todos,
+            subTasks = subTasks,
+            notes = notes
+        )
+    }
+
+    fun importNfcPayload(payload: com.goldenminute.catalyst.nfc.NfcPayload, merge: Boolean, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val categoryDao = database.categoryDao()
+                    val todoDao = database.todoDao()
+                    val noteDao = database.noteDao()
+
+                    if (!merge) {
+                        database.clearAllTables()
+                        payload.categories.forEach { categoryDao.insertCategory(it) }
+                        payload.todos.forEach { todoDao.insertTodo(it) }
+                        payload.subTasks.forEach { todoDao.insertSubTask(it) }
+                        payload.notes.forEach { noteDao.insertNote(it) }
+                    } else {
+                        val existingCategories = categories.value
+                        val categoryIdMap = mutableMapOf<Int, Int>()
+
+                        for (cat in payload.categories) {
+                            val match = existingCategories.find { it.name.equals(cat.name, ignoreCase = true) && it.type == cat.type }
+                            if (match != null) {
+                                categoryIdMap[cat.id] = match.id
+                            } else {
+                                val newId = categoryDao.insertCategory(cat.copy(id = 0)).toInt()
+                                categoryIdMap[cat.id] = newId
+                            }
+                        }
+
+                        val todoIdMap = mutableMapOf<Int, Int>()
+                        for (todo in payload.todos) {
+                            val remappedCatId = todo.categoryId?.let { categoryIdMap[it] }
+                            val newTodo = todo.copy(id = 0, categoryId = remappedCatId)
+                            val newTodoId = todoDao.insertTodo(newTodo).toInt()
+                            todoIdMap[todo.id] = newTodoId
+                        }
+
+                        for (sub in payload.subTasks) {
+                            val mappedTodoId = todoIdMap[sub.todoId]
+                            if (mappedTodoId != null) {
+                                todoDao.insertSubTask(sub.copy(id = 0, todoId = mappedTodoId))
+                            }
+                        }
+
+                        for (note in payload.notes) {
+                            val remappedCatId = note.categoryId?.let { categoryIdMap[it] }
+                            val newNote = note.copy(id = 0, categoryId = remappedCatId)
+                            noteDao.insertNote(newNote)
+                        }
+                    }
+                }
+
+                NotesWidget().updateAll(getApplication())
+                TasksWidget().updateAll(getApplication())
+                onResult(true)
             } catch (e: Exception) {
                 e.printStackTrace()
                 onResult(false)

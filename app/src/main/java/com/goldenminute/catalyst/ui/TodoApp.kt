@@ -9,6 +9,8 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.animation.*
 import com.goldenminute.catalyst.ui.theme.LocalThemeRevealState
+import com.goldenminute.catalyst.ui.theme.Vazirmatn
+import com.goldenminute.catalyst.ui.theme.getTypography
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -149,6 +151,7 @@ fun TodoApp(viewModel: TodoViewModel) {
     val currentTab by viewModel.selectedTab.collectAsState()
     val currentTheme by viewModel.appTheme.collectAsState()
     val customThemeColor by viewModel.customThemeColor.collectAsState()
+    val appLanguage by viewModel.appLanguage.collectAsState()
 
     val subTasksGrouped = remember(subTasks) { subTasks.groupBy { it.todoId } }
     val categoriesMap = remember(categories) { categories.associateBy { it.id } }
@@ -492,8 +495,8 @@ fun TodoApp(viewModel: TodoViewModel) {
                                         color = TextPrimary
                                     )
                                     if (currentScreen != "Settings") {
-                                        val dateText = remember {
-                                            val isPersian = getSystemLocale().language == "fa"
+                                        val dateText = remember(appLanguage) {
+                                            val isPersian = appLanguage == "fa"
                                             if (isPersian) {
                                                 val cal = Calendar.getInstance()
                                                 val jd = JalaliCalendarHelper.gregorianToJalali(
@@ -513,7 +516,7 @@ fun TodoApp(viewModel: TodoViewModel) {
                                             } else {
                                                 val sdf = SimpleDateFormat(
                                                     "EEEE, d MMMM",
-                                                    getSystemLocale()
+                                                    Locale(appLanguage)
                                                 )
                                                 sdf.format(Date())
                                             }
@@ -1803,7 +1806,8 @@ fun TodoApp(viewModel: TodoViewModel) {
                         onBack = { sessionHistoryTodo = null },
                         onDeleteRecord = { index ->
                             viewModel.deleteSessionRecord(currentTaskForHistory.id, index)
-                        }
+                        },
+                        viewModel = viewModel
                     )
                 }
             }
@@ -2972,7 +2976,6 @@ fun TodoCard(
     }
 
     var isExpanded by remember { mutableStateOf(false) }
-    var isSessionsExpanded by remember { mutableStateOf(false) }
     val completedCount = subTasks.count { it.isCompleted }
     val totalCount = subTasks.size
 
@@ -3860,342 +3863,75 @@ fun TodoCard(
 
             if (dbRecords.isNotEmpty()) {
                 Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 14.dp, end = 14.dp, bottom = 14.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .border(
-                                    1.dp,
-                                    BorderColor.copy(alpha = 0.3f),
-                                    RoundedCornerShape(16.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 14.dp, end = 14.dp, bottom = 14.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(
+                            1.dp,
+                            BorderColor.copy(alpha = 0.3f),
+                            RoundedCornerShape(16.dp)
+                        )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onViewAllSessions() }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Analytics,
+                            contentDescription = "Focus History",
+                            tint = NeonCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.focus_session_history),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            val sessionsText = if (dbRecords.size == 1) {
+                                stringResource(
+                                    R.string.session_records_count,
+                                    dbRecords.size
                                 )
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { isSessionsExpanded = !isSessionsExpanded }
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Analytics,
-                                    contentDescription = "Focus History",
-                                    tint = if (isSessionsExpanded) NeonCyan else TextSecondary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = stringResource(R.string.focus_session_history),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
-                                    )
-                                    val sessionsText = if (dbRecords.size == 1) {
-                                        stringResource(
-                                            R.string.session_records_count,
-                                            dbRecords.size
-                                        )
-                                    } else {
-                                        stringResource(
-                                            R.string.session_records_count_plural,
-                                            dbRecords.size
-                                        )
-                                    }
-                                    Text(
-                                        text = sessionsText,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = TextSecondary
-                                    )
-                                }
-                                TextButton(
-                                    onClick = onViewAllSessions,
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.view_all_sessions),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = NeonCyan,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                Icon(
-                                    imageVector = if (isSessionsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    contentDescription = if (isSessionsExpanded) "Collapse" else "Expand",
-                                    tint = TextSecondary,
-                                    modifier = Modifier.size(20.dp)
+                            } else {
+                                stringResource(
+                                    R.string.session_records_count_plural,
+                                    dbRecords.size
                                 )
                             }
-
-                            AnimatedVisibility(
-                                visible = isSessionsExpanded,
-                                enter = expandVertically() + fadeIn(),
-                                exit = shrinkVertically() + fadeOut()
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(start = 14.dp, end = 14.dp, bottom = 14.dp)
-                                ) {
-                                    HorizontalDivider(
-                                        color = BorderColor.copy(alpha = 0.3f),
-                                        thickness = 1.dp,
-                                        modifier = Modifier.padding(bottom = 12.dp)
-                                    )
-
-                                    val totalPomos = dbRecords.filter { it.isPomodoro }
-                                        .sumOf { it.value.toInt() }
-                                    val totalStopwatchMs =
-                                        dbRecords.filter { !it.isPomodoro }.sumOf { it.value }
-
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(bottom = 12.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Column(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .background(SlateDark.copy(alpha = 0.6f))
-                                                .padding(8.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Timer,
-                                                contentDescription = null,
-                                                tint = NeonPurple,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Text(
-                                                text = stringResource(R.string.pomodoro_label),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = TextSecondary
-                                            )
-                                            val cyclesText = if (totalPomos == 1) {
-                                                stringResource(
-                                                    R.string.pomodoro_cycles_count,
-                                                    totalPomos
-                                                )
-                                            } else {
-                                                stringResource(
-                                                    R.string.pomodoro_cycles_count_plural,
-                                                    totalPomos
-                                                )
-                                            }
-                                            Text(
-                                                text = cyclesText,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = TextPrimary
-                                            )
-                                        }
-
-                                        Column(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .background(SlateDark.copy(alpha = 0.6f))
-                                                .padding(8.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.HourglassBottom,
-                                                contentDescription = null,
-                                                tint = NeonCyan,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Text(
-                                                text = stringResource(R.string.stopwatch_label),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = TextSecondary
-                                            )
-                                            val totalHrs = totalStopwatchMs / 3600000
-                                            val totalMins = (totalStopwatchMs % 3600000) / 60000
-                                            val totalSecs = (totalStopwatchMs % 60000) / 1000
-                                            val stopwatchStr = if (totalHrs > 0) {
-                                                "${totalHrs}h ${totalMins}m"
-                                            } else if (totalMins > 0) {
-                                                "${totalMins}m"
-                                            } else {
-                                                "${totalSecs}s"
-                                            }
-                                            Text(
-                                                text = stopwatchStr,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = TextPrimary
-                                            )
-                                        }
-                                    }
-
-                                    Column(
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        dbRecords.forEachIndexed { idx, rec ->
-                                            val hrs = rec.value / 3600000
-                                            val mins = (rec.value % 3600000) / 60000
-                                            val secs = (rec.value % 60000) / 1000
-
-                                            val durationStr = if (rec.isPomodoro) {
-                                                "${rec.value} cycle${if (rec.value > 1) "s" else ""}"
-                                            } else {
-                                                if (hrs > 0) {
-                                                    "${hrs}h ${mins}m"
-                                                } else if (mins > 0) {
-                                                    "${mins}m"
-                                                } else {
-                                                    "${secs}s"
-                                                }
-                                            }
-
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clip(RoundedCornerShape(12.dp))
-                                                    .background(SlateDark.copy(alpha = 0.5f))
-                                                    .border(
-                                                        1.dp,
-                                                        BorderColor.copy(alpha = 0.15f),
-                                                        RoundedCornerShape(12.dp)
-                                                    )
-                                                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(32.dp)
-                                                        .background(
-                                                            if (rec.isPomodoro) NeonPurple.copy(
-                                                                alpha = 0.15f
-                                                            ) else NeonCyan.copy(alpha = 0.15f),
-                                                            CircleShape
-                                                        ),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Icon(
-                                                        imageVector = if (rec.isPomodoro) Icons.Default.Timer else Icons.Default.HourglassBottom,
-                                                        contentDescription = null,
-                                                        tint = if (rec.isPomodoro) NeonPurple else NeonCyan,
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-
-                                                Spacer(modifier = Modifier.width(12.dp))
-
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    val typeLabel =
-                                                        if (rec.isPomodoro) stringResource(R.string.pomodoro_label) else stringResource(
-                                                            R.string.stopwatch_label
-                                                        )
-                                                    Text(
-                                                        text = stringResource(R.string.session_format, idx + 1, typeLabel),
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = TextPrimary
-                                                    )
-                                                    Spacer(modifier = Modifier.height(2.dp))
-                                                    val isPersianLog =
-                                                        getSystemLocale().language == "fa"
-                                                    val formattedDate =
-                                                        remember(rec.timestamp, isPersianLog) {
-                                                            try {
-                                                                if (isPersianLog) {
-                                                                    JalaliCalendarHelper.formatJalali(
-                                                                        rec.timestamp,
-                                                                        includeTime = true,
-                                                                        includeYear = true
-                                                                    )
-                                                                } else {
-                                                                    val date = Date(rec.timestamp)
-                                                                    val format = SimpleDateFormat(
-                                                                        "MMM dd, yyyy • h:mm a",
-                                                                        getSystemLocale()
-                                                                    )
-                                                                    format.format(date)
-                                                                }
-                                                            } catch (_: Exception) {
-                                                                ""
-                                                            }
-                                                        }
-                                                    if (formattedDate.isNotEmpty()) {
-                                                        Text(
-                                                            text = formattedDate,
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = TextSecondary
-                                                        )
-                                                    }
-                                                }
-
-                                                Text(
-                                                    text = durationStr,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (rec.isPomodoro) NeonPurple else NeonCyan,
-                                                    modifier = Modifier.padding(end = 8.dp)
-                                                )
-
-                                                IconButton(
-                                                    onClick = { onDeleteSessionRecord(idx) },
-                                                    modifier = Modifier.size(24.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Close,
-                                                        contentDescription = "Delete record",
-                                                        tint = TextSecondary.copy(alpha = 0.6f),
-                                                        modifier = Modifier.size(14.dp)
-                                                    )
-                                                }
-                                                } // Close Row here
-                                            if (rec.appSections.isNotEmpty()) {
-                                                Spacer(modifier = Modifier.height(8.dp))
-                                                HorizontalDivider(
-                                                    color = BorderColor.copy(alpha = 0.15f),
-                                                    thickness = 1.dp,
-                                                    modifier = Modifier.padding(bottom = 8.dp)
-                                                )
-                                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                    rec.appSections.forEach { (section, ms) ->
-                                                        val sHrs = ms / 3600000
-                                                        val sMins = (ms % 3600000) / 60000
-                                                        val sSecs = (ms % 60000) / 1000
-                                                        val sDur = if (sHrs > 0) "${sHrs}h ${sMins}m" else if (sMins > 0) "${sMins}m" else "${sSecs}s"
-                                                        
-                                                        Row(
-                                                            modifier = Modifier.fillMaxWidth(),
-                                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                                            verticalAlignment = Alignment.CenterVertically
-                                                        ) {
-                                                            val isPersianSection = getSystemLocale().language == "fa"
-                                                            Text(
-                                                                text = com.goldenminute.catalyst.service.SmartTrackerService.localizeSectionName(section, isPersianSection),
-                                                                style = MaterialTheme.typography.bodySmall,
-                                                                color = TextSecondary
-                                                            )
-                                                            Text(
-                                                                text = sDur,
-                                                                style = MaterialTheme.typography.labelSmall,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = TextPrimary.copy(alpha = 0.8f)
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
+                            Text(
+                                text = sessionsText,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary
+                            )
+                        }
+                        TextButton(
+                            onClick = onViewAllSessions,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.view_all_sessions),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = NeonCyan,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = "View all sessions",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
-                                }
-                            }
-                        }
-                    }
+        }
 
 
 
@@ -5245,6 +4981,85 @@ fun TaskDetailsDialog(
                         }
                     }
 
+                    // Floating Task Bar Toggle
+                    val activeFloatingTaskId by com.goldenminute.catalyst.service.FloatingTaskBarService.activeTaskId.collectAsState()
+                    val isFloatingActive = activeFloatingTaskId == todo.id
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(
+                                1.dp,
+                                if (isFloatingActive) NeonCyan.copy(alpha = 0.6f) else BorderColor.copy(alpha = 0.3f),
+                                RoundedCornerShape(16.dp)
+                            )
+                            .clickable {
+                                if (isFloatingActive) {
+                                    com.goldenminute.catalyst.service.FloatingTaskBarService.close(context)
+                                } else {
+                                    com.goldenminute.catalyst.service.FloatingTaskBarService.show(context, todo.id)
+                                }
+                            },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isFloatingActive) NeonCyan.copy(alpha = 0.08f) else SlateDark.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isFloatingActive) NeonCyan.copy(alpha = 0.2f) else SlateDark),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PictureInPicture,
+                                    contentDescription = null,
+                                    tint = if (isFloatingActive) NeonCyan else TextSecondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.floating_task_bar_title),
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = if (isFloatingActive) NeonCyan else TextPrimary
+                                )
+                                Text(
+                                    text = stringResource(R.string.floating_task_bar_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+                            }
+
+                            Switch(
+                                checked = isFloatingActive,
+                                onCheckedChange = { checked ->
+                                    if (checked) {
+                                        com.goldenminute.catalyst.service.FloatingTaskBarService.show(context, todo.id)
+                                    } else {
+                                        com.goldenminute.catalyst.service.FloatingTaskBarService.close(context)
+                                    }
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = NeonCyan,
+                                    checkedTrackColor = NeonCyan.copy(alpha = 0.3f),
+                                    uncheckedThumbColor = TextMuted,
+                                    uncheckedTrackColor = SlateDark
+                                )
+                            )
+                        }
+                    }
+
                     // Subtasks (Checklist)
                     if (subTasks.isNotEmpty()) {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -5303,7 +5118,7 @@ fun TaskDetailsDialog(
                         }
 
                         val appPackage = remember(todo.associatedPackageNames) {
-                            todo.associatedPackageNames?.split(",")?.firstOrNull { it.isNotBlank() }
+                            todo.associatedPackageNames
                         }
 
                         if (unifiedSections.isNotEmpty()) {
@@ -5962,13 +5777,46 @@ fun AddTaskScreen(
                     OutlinedTextField(
                         value = appSearchQuery,
                         onValueChange = { appSearchQuery = it },
-                        placeholder = { Text(stringResource(R.string.search_apps), color = TextSecondary) },
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp).height(50.dp),
+                        placeholder = {
+                            Text(
+                                text = stringResource(R.string.search_apps),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextMuted
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = stringResource(R.string.search_apps),
+                                tint = TextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            if (appSearchQuery.isNotEmpty()) {
+                                IconButton(onClick = { appSearchQuery = "" }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = stringResource(R.string.clear_action),
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = NeonCyan,
                             unfocusedBorderColor = BorderColor,
+                            focusedContainerColor = SlateLight.copy(alpha = 0.3f),
+                            unfocusedContainerColor = SlateLight.copy(alpha = 0.15f),
                             focusedTextColor = TextPrimary,
                             unfocusedTextColor = TextPrimary,
+                            focusedPlaceholderColor = TextMuted,
+                            unfocusedPlaceholderColor = TextMuted,
                             cursorColor = NeonCyan
                         ),
                         singleLine = true,
@@ -6217,7 +6065,7 @@ fun AddTaskScreen(
                     }
 
                     // Timer Mode Selection State
-                    var timerMode by remember { androidx.compose.runtime.mutableStateOf(todoToEdit?.timerMode ?: "Pomodoro") }
+                    var timerMode by remember { androidx.compose.runtime.mutableStateOf(todoToEdit?.timerMode ?: "Stopwatch") }
                     val timerOptions = listOf("Pomodoro", "Stopwatch")
 
                     // Title Input
@@ -6957,35 +6805,7 @@ fun AddTaskScreen(
                                 Spacer(modifier = Modifier.height(16.dp))
                             }
 
-                            val doomscrollingAlertEnabled by viewModel.doomscrollingAlertEnabled.collectAsState()
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        viewModel.setDoomscrollingAlertEnabled(!doomscrollingAlertEnabled)
-                                    }
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = doomscrollingAlertEnabled,
-                                    onCheckedChange = { viewModel.setDoomscrollingAlertEnabled(it) },
-                                    colors = CheckboxDefaults.colors(checkedColor = NeonCyan)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = stringResource(R.string.doomscrolling_alert_title),
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                        color = TextPrimary
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.doomscrolling_alert_desc),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = TextSecondary
-                                    )
-                                }
-                            }
+
                         }
                     }
 
@@ -7129,7 +6949,7 @@ fun AddTaskScreen(
                                             isDaily,
                                             hasTime,
                                             isReminderRepeating,
-                                            associatedPackageNames.joinToString(","),
+                                            if (associatedPackageNames.isEmpty()) null else associatedPackageNames.joinToString(","),
                                             timerMode,
                                             com.goldenminute.catalyst.service.SmartTrackerService.serializeSectionsMap(cleanedSections)
                                         )
@@ -7947,7 +7767,6 @@ fun isAccessibilityServiceEnabled(context: android.content.Context, service: Cla
         while (stringColonSplitter.hasNext()) {
             val componentNameString = stringColonSplitter.next()
             if (componentNameString.equals(expectedComponentName, ignoreCase = true) ||
-                componentNameString.equals(expectedShortComponentName, ignoreCase = true) ||
                 (componentNameString.contains(context.packageName, ignoreCase = true) && componentNameString.contains("SmartTrackerService", ignoreCase = true))
             ) {
                 return true
@@ -7962,61 +7781,582 @@ fun isAccessibilityServiceEnabled(context: android.content.Context, service: Cla
 fun MindfulnessCheckDialog(
     appName: String = "",
     sectionName: String = "",
+    languageCode: String = "",
+    totalWastedMs: Long = 0L,
+    showHighPriorityTasks: Boolean = false,
+    highPriorityTasks: List<TodoItem> = emptyList(),
     onDismiss: () -> Unit,
     onInspiration: () -> Unit,
-    onDoomscrolling: () -> Unit
+    onDoomscrolling: () -> Unit,
+    onTaskSelected: (TodoItem) -> Unit = {}
 ) {
-    val isLight = !androidx.compose.foundation.isSystemInDarkTheme()
-    val bgColor = if (isLight) Color(0xFFF0F0F0) else Color(0xFF1E1E1E)
-    val textColor = if (isLight) Color.Black else Color.White
-    val subtitleColor = if (isLight) Color(0xFF666666) else Color(0xFFAAAAAA)
-    val accentColor = if (isLight) Color(0xFF3b82f6) else Color(0xFF8b5cf6)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val isPersian = languageCode == "fa" ||
+        context.resources.configuration.locales[0].language == "fa" ||
+        java.util.Locale.getDefault().language == "fa"
 
-    // Build contextual description
-    val contextDesc = if (appName.isNotEmpty() && sectionName.isNotEmpty()) {
-        stringResource(R.string.mindfulness_check_desc_context, sectionName, appName)
-    } else if (appName.isNotEmpty()) {
-        stringResource(R.string.mindfulness_check_desc_app, appName)
-    } else {
-        stringResource(R.string.mindfulness_check_desc)
+    val titleText = if (isPersian) "⚠️ هشدار اسکرول بی‌هدف" else stringResource(R.string.doomscroll_warning_title)
+    val subtitleText = if (isPersian) "شما در حال اسکرول بی‌پایان ریلز هستید" else stringResource(R.string.doomscroll_warning_subtitle)
+    val timeLabelText = if (isPersian) "زمان صرف‌شده برای اسکرول" else stringResource(R.string.doomscroll_warning_time_label)
+    val questionText = if (isPersian) "آیا می‌خواهید وقت خود را اینگونه صرف کنید؟" else stringResource(R.string.doomscroll_warning_question)
+    val intentionalBtnText = if (isPersian) "هدفمند هستم" else stringResource(R.string.doomscroll_btn_intentional)
+    val doomscrollingBtnText = if (isPersian) "دارم بی‌هدف اسکرول می‌کنم" else stringResource(R.string.doomscroll_btn_doomscrolling)
+
+    val encouragementTitle = if (isPersian) "روی کارهای مهم تمرکز کنید!" else stringResource(R.string.doomscroll_encouragement_title)
+    val encouragementDesc = if (isPersian) "شما تایید کردید که در حال اسکرول بی‌هدف هستید. اجازه ندهید الگوریتم‌ها وقت باارزش شما را هدر دهند؛ کارهای مهم منتظر شما هستند!" else stringResource(R.string.doomscroll_encouragement_desc)
+    val highPriorityTasksTitle = if (isPersian) "کارهای با اولویت بالا" else stringResource(R.string.doomscroll_high_priority_tasks)
+    val startFocusBtnText = if (isPersian) "شروع تمرکز روی کارها" else stringResource(R.string.doomscroll_start_focus)
+    val dismissLaterBtnText = if (isPersian) "بعداً انجام می‌دهم" else stringResource(R.string.doomscroll_dismiss_later)
+    val noTasksText = if (isPersian) "هیچ کار انجام‌نشده‌ای ندارید. در کاتالیست کار جدیدی ثبت کنید!" else stringResource(R.string.doomscroll_no_tasks)
+    val openCatalystBtnText = if (isPersian) "ورود به کاتالیست" else stringResource(R.string.doomscroll_create_task)
+    val priorityBadgeText = if (isPersian) "اولویت بالا" else stringResource(R.string.high_priority_badge)
+    val gotItBtnText = if (isPersian) "متوجه شدم" else stringResource(R.string.doomscroll_got_it)
+    var isShowingTasks by remember(showHighPriorityTasks) { mutableStateOf(showHighPriorityTasks) }
+
+    val warningAmber = Color(0xFFFF9800)
+    val warningRed = Color(0xFFEF4444)
+    val warningDarkBg = Color(0xFF1A1215)
+    val warningCardBg = Color(0xFF261A1E)
+    val intentionalGreen = Color(0xFF22C55E)
+
+    // Animated pulse for the warning icon
+    val infiniteTransition = rememberInfiniteTransition(label = "warning_pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_scale"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_alpha"
+    )
+
+    // Total accumulated wasted time counter (today's previous wasted time + current dialog elapsed time)
+    val initialWastedSec = remember(totalWastedMs) { totalWastedMs / 1000L }
+    val overlayStartTime = remember { com.goldenminute.catalyst.service.SmartTrackerService.overlayShownTime.takeIf { it > 0L } ?: System.currentTimeMillis() }
+    var dialogElapsedSec by remember { mutableStateOf(0L) }
+    LaunchedEffect(overlayStartTime) {
+        while (true) {
+            dialogElapsedSec = (System.currentTimeMillis() - overlayStartTime) / 1000L
+            kotlinx.coroutines.delay(1000L)
+        }
+    }
+    val totalElapsedSec = initialWastedSec + dialogElapsedSec
+    val elapsedDisplay = remember(totalElapsedSec, isPersian) {
+        val hours = totalElapsedSec / 3600L
+        val mins = (totalElapsedSec % 3600L) / 60L
+        val secs = totalElapsedSec % 60L
+        val rawStr = if (hours > 0) {
+            String.format(java.util.Locale.US, "%d:%02d:%02d", hours, mins, secs)
+        } else {
+            String.format(java.util.Locale.US, "%02d:%02d", mins, secs)
+        }
+        if (isPersian) JalaliCalendarHelper.toPersianDigits(rawStr) else rawStr
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = bgColor,
-        title = {
-            Text(stringResource(R.string.mindfulness_check_title), color = textColor, fontWeight = FontWeight.Bold)
-        },
-        text = {
-            Column {
-                if (appName.isNotEmpty()) {
-                    Text(
-                        text = if (sectionName.isNotEmpty()) "$appName • $sectionName" else appName,
-                        color = accentColor,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp
+    val dialogFontFamily = if (isPersian) Vazirmatn else androidx.compose.ui.text.font.FontFamily.Default
+    val dialogTypography = getTypography(dialogFontFamily)
+
+    MaterialTheme(typography = dialogTypography) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalLayoutDirection provides if (isPersian) androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) {} // Consume clicks to prevent dismissing overlay via backdrop
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(warningDarkBg, Color(0xFF1E1118))
+                        ),
+                        RoundedCornerShape(28.dp)
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    .border(
+                        1.5f.dp,
+                        Brush.verticalGradient(
+                            listOf(warningAmber.copy(alpha = 0.5f), warningRed.copy(alpha = 0.3f))
+                        ),
+                        RoundedCornerShape(28.dp)
+                    )
+                    .padding(24.dp)
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Animated Warning Icon
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .graphicsLayer {
+                                scaleX = pulseScale
+                                scaleY = pulseScale
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // Outer glow
+                        Box(
+                            modifier = Modifier
+                                .size(72.dp)
+                                .background(
+                                    Brush.radialGradient(
+                                        listOf(
+                                            warningAmber.copy(alpha = 0.25f * pulseAlpha),
+                                            Color.Transparent
+                                        )
+                                    ),
+                                    CircleShape
+                                )
+                        )
+                        // Inner icon circle
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(warningAmber.copy(alpha = 0.2f), warningRed.copy(alpha = 0.15f))
+                                    ),
+                                    CircleShape
+                                )
+                                .border(
+                                    1.5f.dp,
+                                    Brush.linearGradient(listOf(warningAmber, warningRed)),
+                                    CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = warningAmber,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Title
+                    Text(
+                        text = titleText,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = if (isPersian) FontWeight.Bold else FontWeight.ExtraBold,
+                            letterSpacing = (-0.5).sp,
+                            fontFamily = dialogFontFamily
+                        ),
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Subtitle
+                    Text(
+                        text = subtitleText,
+                        color = warningAmber.copy(alpha = 0.85f),
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = dialogFontFamily
+                        ),
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    // Time elapsed card
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(warningCardBg, RoundedCornerShape(16.dp))
+                            .border(
+                                1.dp,
+                                warningRed.copy(alpha = 0.25f),
+                                RoundedCornerShape(16.dp)
+                            )
+                            .padding(vertical = 14.dp, horizontal = 16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Timer,
+                                    contentDescription = null,
+                                    tint = warningRed,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = timeLabelText,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontFamily = dialogFontFamily
+                                    )
+                                )
+                            }
+                            Text(
+                                text = elapsedDisplay,
+                                color = warningRed,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = if (isPersian) Vazirmatn else androidx.compose.ui.text.font.FontFamily.Monospace
+                                )
+                            )
+                        }
+                    }
+
+                    AnimatedContent(
+                        targetState = isShowingTasks,
+                        label = "dialog_tasks_transition"
+                    ) { showingTasks ->
+                        if (showingTasks) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Encouragement Card
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            Brush.linearGradient(
+                                                listOf(
+                                                    Color(0xFF1E261E),
+                                                    Color(0xFF191F1A)
+                                                )
+                                            ),
+                                            RoundedCornerShape(16.dp)
+                                        )
+                                        .border(
+                                            1.dp,
+                                            Brush.horizontalGradient(
+                                                listOf(
+                                                    intentionalGreen.copy(alpha = 0.45f),
+                                                    warningAmber.copy(alpha = 0.35f)
+                                                )
+                                            ),
+                                            RoundedCornerShape(16.dp)
+                                        )
+                                        .padding(14.dp)
+                                ) {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(28.dp)
+                                                    .background(intentionalGreen.copy(alpha = 0.2f), CircleShape),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.CheckCircle,
+                                                    contentDescription = null,
+                                                    tint = intentionalGreen,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                            Text(
+                                                text = encouragementTitle,
+                                                color = Color.White,
+                                                style = MaterialTheme.typography.titleSmall.copy(
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontFamily = dialogFontFamily
+                                                )
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = encouragementDesc,
+                                            color = Color.White.copy(alpha = 0.85f),
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                lineHeight = 18.sp,
+                                                fontFamily = dialogFontFamily
+                                            )
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // High Priority Tasks Header
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Star,
+                                        contentDescription = null,
+                                        tint = warningAmber,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = highPriorityTasksTitle,
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.labelLarge.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = dialogFontFamily
+                                        )
+                                    )
+                                    if (highPriorityTasks.isNotEmpty()) {
+                                        val countStr = if (isPersian) JalaliCalendarHelper.toPersianDigits(highPriorityTasks.size.toString()) else highPriorityTasks.size.toString()
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = warningAmber.copy(alpha = 0.15f),
+                                            border = BorderStroke(1.dp, warningAmber.copy(alpha = 0.35f))
+                                        ) {
+                                            Text(
+                                                text = countStr,
+                                                color = warningAmber,
+                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontFamily = dialogFontFamily
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                if (highPriorityTasks.isNotEmpty()) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        highPriorityTasks.forEach { task ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .background(
+                                                        warningCardBg,
+                                                        RoundedCornerShape(14.dp)
+                                                    )
+                                                    .border(
+                                                        1.dp,
+                                                        warningAmber.copy(alpha = 0.25f),
+                                                        RoundedCornerShape(14.dp)
+                                                    )
+                                                    .clickable { onTaskSelected(task) }
+                                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+                                                ) {
+                                                    Text(
+                                                        text = task.title,
+                                                        color = Color.White,
+                                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            fontFamily = dialogFontFamily
+                                                        ),
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    Spacer(modifier = Modifier.height(3.dp))
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                    ) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .background(
+                                                                    if (task.priority == 2) warningRed.copy(alpha = 0.2f) else warningAmber.copy(alpha = 0.2f),
+                                                                    RoundedCornerShape(4.dp)
+                                                                )
+                                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = if (task.priority == 2) priorityBadgeText else if (isPersian) "متوسط" else "Medium",
+                                                                color = if (task.priority == 2) warningRed else warningAmber,
+                                                                fontSize = 10.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                fontFamily = dialogFontFamily
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                // Play / Focus Icon
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(34.dp)
+                                                        .background(intentionalGreen.copy(alpha = 0.15f), CircleShape)
+                                                        .border(1.dp, intentionalGreen.copy(alpha = 0.4f), CircleShape),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.PlayArrow,
+                                                        contentDescription = null,
+                                                        tint = intentionalGreen,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // Empty state
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(warningCardBg, RoundedCornerShape(14.dp))
+                                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                                            .padding(14.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = noTasksText,
+                                            color = Color.White.copy(alpha = 0.7f),
+                                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = dialogFontFamily),
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(18.dp))
+
+                                // Single "Got it" Button
+                                Button(
+                                    onClick = onDismiss,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = intentionalGreen
+                                    ),
+                                    shape = RoundedCornerShape(14.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = gotItBtnText,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        fontFamily = dialogFontFamily
+                                    )
+                                }
+                            }
+                        } else {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Question text
+                                Text(
+                                    text = questionText,
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontFamily = dialogFontFamily
+                                    ),
+                                    textAlign = TextAlign.Center
+                                )
+
+                                Spacer(modifier = Modifier.height(20.dp))
+
+                                // Action buttons
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    // "I'm Being Intentional" — green, full width
+                                    Button(
+                                        onClick = onInspiration,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(48.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = intentionalGreen
+                                        ),
+                                        shape = RoundedCornerShape(14.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = intentionalBtnText,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            fontFamily = dialogFontFamily
+                                        )
+                                    }
+
+                                    // "I'm Doomscrolling" — outlined red/amber, full width
+                                    OutlinedButton(
+                                        onClick = {
+                                            onDoomscrolling()
+                                            isShowingTasks = true
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(48.dp),
+                                        border = BorderStroke(
+                                            1.5f.dp,
+                                            Brush.linearGradient(listOf(warningAmber, warningRed))
+                                        ),
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = warningRed.copy(alpha = 0.08f)
+                                        )
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Warning,
+                                            contentDescription = null,
+                                            tint = warningAmber,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = doomscrollingBtnText,
+                                            color = warningAmber,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            fontFamily = dialogFontFamily
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-                Text(contextDesc, color = textColor)
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onInspiration,
-                colors = ButtonDefaults.buttonColors(containerColor = accentColor)
-            ) {
-                Text(stringResource(R.string.mindfulness_check_inspiration), color = Color.White)
-            }
-        },
-        dismissButton = {
-            OutlinedButton(
-                onClick = onDoomscrolling,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = textColor)
-            ) {
-                Text(stringResource(R.string.mindfulness_check_doomscrolling))
             }
         }
-    )
+    }
 }
 

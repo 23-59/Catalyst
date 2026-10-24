@@ -81,6 +81,15 @@ fun FocusScreen(
     ) { /* permission result handled silently; timer still starts */ }
 
     fun startTimerWithPermissionCheck() {
+        val isAppAssigned = selectedTodo != null && !selectedTodo!!.associatedPackageNames.isNullOrEmpty()
+        if (isAppAssigned) {
+            android.widget.Toast.makeText(
+                context,
+                context.getString(R.string.timer_app_assigned_blocked),
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(
                 context, Manifest.permission.POST_NOTIFICATIONS
@@ -93,6 +102,13 @@ fun FocusScreen(
     }
 
     var showSettingsDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(selectedTodo?.id, isTimerRunning) {
+        if (isTimerRunning && selectedTodo != null && !selectedTodo!!.associatedPackageNames.isNullOrEmpty()) {
+            viewModel.isTimerRunning.value = false
+            TimerStateManager.autoPauseAndSaveTask(selectedTodo!!.id)
+        }
+    }
 
     LaunchedEffect(selectedTodo?.id) {
         sessionRecords = emptyList()
@@ -568,7 +584,7 @@ fun FocusScreen(
                                     viewModel.addSessionRecords(selectedTodo!!.id, listOf(newRecord))
                                 } else {
                                     val duration = timeElapsed
-                                    if (duration > 0) {
+                                    if (duration > 60_000L) {
                                         val newRecord = com.goldenminute.catalyst.data.RecordedTimeItem(
                                             isPomodoro = false,
                                             value = duration,
@@ -578,6 +594,11 @@ fun FocusScreen(
                                         viewModel.isTimerRunning.value = false
                                         viewModel.timeElapsed.value = 0L
                                         lastRecordedTimeElapsed = 0L
+                                    } else {
+                                        viewModel.isTimerRunning.value = false
+                                        viewModel.timeElapsed.value = 0L
+                                        lastRecordedTimeElapsed = 0L
+                                        android.widget.Toast.makeText(context, context.getString(R.string.session_too_short_not_saved), android.widget.Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             } else if (isIdleMode) {
@@ -588,21 +609,24 @@ fun FocusScreen(
                                         timestamp = System.currentTimeMillis()
                                     )
                                     viewModel.addFreeModeFocusSession(newRecord)
+                                    android.widget.Toast.makeText(context, context.getString(R.string.free_focus_session_saved), android.widget.Toast.LENGTH_SHORT).show()
                                 } else {
                                     val duration = timeElapsed
-                                    if (duration > 0) {
+                                    if (duration > 60_000L) {
                                         val newRecord = com.goldenminute.catalyst.data.RecordedTimeItem(
                                             isPomodoro = false,
                                             value = duration,
                                             timestamp = System.currentTimeMillis()
                                         )
                                         viewModel.addFreeModeFocusSession(newRecord)
+                                        android.widget.Toast.makeText(context, context.getString(R.string.free_focus_session_saved), android.widget.Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        android.widget.Toast.makeText(context, context.getString(R.string.session_too_short_not_saved), android.widget.Toast.LENGTH_SHORT).show()
                                     }
                                 }
                                 viewModel.isTimerRunning.value = false
                                 viewModel.timeElapsed.value = 0L
                                 lastRecordedTimeElapsed = 0L
-                                android.widget.Toast.makeText(context, context.getString(R.string.free_focus_session_saved), android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
                 ) {
@@ -775,7 +799,7 @@ fun FocusScreen(
                 // Tasks
                 incompleteTodos.forEach { item ->
                     val isSelected = selectedTodo?.id == item.id
-                    val isAppLinked = !item.associatedPackageNames.isNullOrEmpty()
+                    val isAppLinked = !item.associatedPackageNames.isNullOrBlank() && item.associatedPackageNames.split(",").any { it.isNotBlank() }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="com.goldenminute.catalyst.service.CatalystVoiceInteractionSessionService"
+    android:recognitionService="com.goldenminute.catalyst.service.CatalystVoiceInteractionService"
+    android:supportsAssist="true" />

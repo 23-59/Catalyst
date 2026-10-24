@@ -54,7 +54,7 @@ data class TodoItem(
     val isReminderRepeating: Boolean = false,
     @Json(name = "associatedPackageName") @ColumnInfo(name = "associatedPackageName") val associatedPackageNames: String? = null,
     val trackingMode: String = "Strict", // "Strict" or "Creative"
-    val timerMode: String = "Pomodoro", // "Pomodoro" or "Stopwatch"
+    val timerMode: String = "Stopwatch", // "Pomodoro" or "Stopwatch"
     val associatedSections: String? = null // Format: "pkg:Section1|Section2,pkg2:Section3" or null for whole-app
 )
 

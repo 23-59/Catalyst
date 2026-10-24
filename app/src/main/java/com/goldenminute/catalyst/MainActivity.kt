@@ -74,6 +74,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import android.nfc.NfcAdapter
+import android.nfc.Tag
 class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
@@ -81,6 +83,11 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         val viewModel: TodoViewModel by viewModels()
         handleTimerIntent(intent, viewModel)
+        handleNfcIntent(intent)
+        intent.getStringExtra("TARGET_SCREEN")?.let { target ->
+            viewModel.currentScreenState.value = target
+            intent.removeExtra("TARGET_SCREEN")
+        }
     }
 
     private fun handleTimerIntent(intent: Intent?, viewModel: TodoViewModel) {
@@ -88,6 +95,29 @@ class MainActivity : ComponentActivity() {
             viewModel.saveCurrentTimerSession(this)
             // Clear the action so it doesn't trigger again on rotation
             intent.action = null
+        }
+        intent?.getStringExtra("TARGET_SCREEN")?.let { target ->
+            viewModel.currentScreenState.value = target
+            intent.removeExtra("TARGET_SCREEN")
+        }
+    }
+
+    private fun handleNfcIntent(intent: Intent?) {
+        if (intent == null) return
+        val action = intent.action ?: return
+        if (action == NfcAdapter.ACTION_NDEF_DISCOVERED ||
+            action == NfcAdapter.ACTION_TAG_DISCOVERED ||
+            action == NfcAdapter.ACTION_TECH_DISCOVERED
+        ) {
+            val tag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
+            }
+            if (tag != null) {
+                com.goldenminute.catalyst.nfc.NfcManager.activeTagCallback?.invoke(tag)
+            }
         }
     }
 
@@ -99,6 +129,8 @@ class MainActivity : ComponentActivity() {
         val viewModel: TodoViewModel by viewModels()
         
         handleTimerIntent(intent, viewModel)
+        handleNfcIntent(intent)
+        com.goldenminute.catalyst.service.PowerButtonShortcutManager.init(applicationContext)
 
         splashScreen.setKeepOnScreenCondition {
             !viewModel.isInitialized.value
@@ -140,12 +172,24 @@ class MainActivity : ComponentActivity() {
                 window.decorView.setBackgroundColor(palette.obsidianBlack.toArgb())
             }
             
-            DisposableEffect(lifecycleOwner, context) {
+            DisposableEffect(lifecycleOwner, context, themeKey, customThemeColor, customThemeApplyToBg) {
                 val observer = LifecycleEventObserver { _, event ->
                     when (event) {
                         Lifecycle.Event.ON_RESUME -> {
                             viewModel.checkAndResetDailyTasks()
-                            com.goldenminute.catalyst.ui.theme.applyThemePalette(palette, isLight)
+                            // Recompute palette fresh from current theme state to fix theme corruption
+                            val freshPalette = com.goldenminute.catalyst.ui.theme.getThemePalette(themeKey, customThemeColor, customThemeApplyToBg)
+                            val freshIsLight = themeKey == "slate_light" || themeKey.startsWith("custom_light")
+                            com.goldenminute.catalyst.ui.theme.applyThemePalette(freshPalette, freshIsLight)
+
+                            // Ensure timers for app-assigned tasks never run while user is in Catalyst
+                            val activeId = TimerStateManager.activeTaskId.value
+                            if (TimerStateManager.isTimerRunning.value && activeId != -1) {
+                                val currentTask = viewModel.allTodosList.value.find { it.id == activeId }
+                                if (currentTask != null && !currentTask.associatedPackageNames.isNullOrEmpty()) {
+                                    TimerStateManager.autoPauseAndSaveTask(activeId)
+                                }
+                            }
                         }
                         Lifecycle.Event.ON_STOP -> {
                             // Service handles itself now

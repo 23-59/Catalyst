@@ -295,55 +295,61 @@ object TimerStateManager {
                             maxOf(currentElapsed, computed, sectionTotal)
                         }
 
-                        // ★ Minimum session threshold: skip sub-5-second noise
-                        if (timeSpent < 5000L) {
-                            Log.d(TAG, "Auto-save skipped for task $taskId: session too short (${timeSpent}ms)")
+                        // ★ Minimum session threshold: don't record if session did not exceed 1 minute (60 seconds)
+                        if (timeSpent <= 60_000L) {
+                            Log.d(TAG, "Auto-save skipped for task $taskId: session did not exceed 1 minute (${timeSpent}ms)")
                             return@launch
                         }
 
                         val existingList = RecordedTimeItem.parseList(todo.recordedTimes).toMutableList()
                         val now = System.currentTimeMillis()
 
-                        // ★ Unify all non-pomodoro sessions under their assigned sections
-                        val nonPomRecords = existingList.filter { !it.isPomodoro }
-                        val pomRecords = existingList.filter { it.isPomodoro }
+                        // Filter out "Unknown" and sections that did not have time more than 1 minute
+                        val cleanSections = sectionsMap
+                            .filterNot { it.key == "Unknown" }
+                            .filter { it.value > 60_000L }
 
-                        val unifiedSections = mutableMapOf<String, Long>()
-                        for (rec in nonPomRecords) {
-                            for ((sec, time) in rec.appSections) {
-                                unifiedSections[sec] = (unifiedSections[sec] ?: 0L) + time
+                        // Continuation check:
+                        // Only merge with the IMMEDIATELY preceding record if:
+                        // 1) It has the same mode (Pomodoro vs Stopwatch)
+                        // 2) It finished within the last 3 minutes (180,000 ms)
+                        // 3) It occurred on the exact same calendar day
+                        val lastRecord = existingList.lastOrNull()
+                        val canMerge = lastRecord != null &&
+                            lastRecord.isPomodoro == isPom &&
+                            (now - lastRecord.timestamp <= 180_000L) &&
+                            isSameCalendarDay(now, lastRecord.timestamp)
+
+                        if (canMerge) {
+                            val target = lastRecord!!
+                            val mergedSections = target.appSections.toMutableMap()
+                            for ((sec, time) in cleanSections) {
+                                mergedSections[sec] = (mergedSections[sec] ?: 0L) + time
                             }
-                        }
-                        for ((sec, time) in sectionsMap) {
-                            unifiedSections[sec] = (unifiedSections[sec] ?: 0L) + time
-                        }
-
-                        // Filter out "Unknown" and transient "General" if specific sections exist
-                        val cleanSections = if (unifiedSections.keys.any { it != "Unknown" && it != "General" }) {
-                            unifiedSections.filterNot { (it.key == "Unknown" || it.key == "General") && it.value < 10_000L }
+                            val updatedRecord = lastRecord.copy(
+                                value = lastRecord.value + timeSpent,
+                                timestamp = now,
+                                appSections = mergedSections
+                            )
+                            existingList[existingList.lastIndex] = updatedRecord
+                            Log.d(TAG, "Merged session for task $taskId with recent record: +${timeSpent}ms (new total=${updatedRecord.value}ms, sections: $mergedSections)")
                         } else {
-                            unifiedSections.filterNot { it.key == "Unknown" && it.value < 10_000L }
+                            val newRecord = RecordedTimeItem(
+                                isPomodoro = isPom,
+                                value = timeSpent,
+                                timestamp = now,
+                                appSections = cleanSections
+                            )
+                            existingList.add(newRecord)
+                            Log.d(TAG, "Auto-saved distinct session for task $taskId: +${timeSpent}ms (sections: $cleanSections, total records: ${existingList.size})")
                         }
-
-                        val prevNonPomTime = nonPomRecords.sumOf { it.value }
-                        val finalNonPomTime = maxOf(prevNonPomTime + timeSpent, cleanSections.values.sum())
-
-                        val unifiedRecord = RecordedTimeItem(
-                            isPomodoro = false,
-                            value = finalNonPomTime,
-                            timestamp = now,
-                            appSections = cleanSections
-                        )
-
-                        val updatedList = (pomRecords + unifiedRecord).toMutableList()
 
                         val updatedTodo = todo.copy(
                             elapsedTime = todo.elapsedTime + timeSpent,
-                            pomodoroCycles = todo.pomodoroCycles,
-                            recordedTimes = RecordedTimeItem.serializeList(updatedList)
+                            pomodoroCycles = if (isPom) todo.pomodoroCycles + (timeSpent / focusLen).toInt().coerceAtLeast(1) else todo.pomodoroCycles,
+                            recordedTimes = RecordedTimeItem.serializeList(existingList)
                         )
                         db.todoDao().updateTodo(updatedTodo)
-                        Log.d(TAG, "Auto-saved & unified sessions for task $taskId: +${timeSpent}ms (total: ${finalNonPomTime}ms, sections: $cleanSections)")
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to auto-save session for task $taskId", e)
@@ -351,10 +357,18 @@ object TimerStateManager {
             }
         }
 
+        startTime = 0L
         timeElapsed.value = 0L
         if (isPom) {
             timeLeft.value = focusLength.value
         }
         saveState()
+    }
+
+    private fun isSameCalendarDay(t1: Long, t2: Long): Boolean {
+        val c1 = java.util.Calendar.getInstance().apply { timeInMillis = t1 }
+        val c2 = java.util.Calendar.getInstance().apply { timeInMillis = t2 }
+        return c1.get(java.util.Calendar.YEAR) == c2.get(java.util.Calendar.YEAR) &&
+               c1.get(java.util.Calendar.DAY_OF_YEAR) == c2.get(java.util.Calendar.DAY_OF_YEAR)
     }
 }

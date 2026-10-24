@@ -379,6 +379,8 @@
     <string name="section_filter_hint">فقط زمان صرف شده در بخش‌های خاص را ردیابی کن</string>
     <string name="close">بستن</string>
     <string name="back">بازگشت</string>
+    <string name="session_too_short_not_saved">جلسات کمتر از ۱ دقیقه ثبت نمی‌شوند.</string>
+    <string name="timer_app_assigned_blocked">این وظیفه به یک برنامه متصل است. برای ردیابی زمان، برنامه را باز کنید.</string>
 
     <!-- Permissions Setup Onboarding -->
     <string name="permissions_setup_title">مجوزهای برنامه</string>
@@ -400,6 +402,21 @@
     <string name="permission_granted">فعال شد</string>
     <string name="continue_to_app">ورود به کاتالیست</string>
     <string name="skip_for_now">بعداً</string>
+
+    <!-- Guided Permissions Flow -->
+    <string name="guided_step_indicator">مرحله %1$d از %2$d</string>
+    <string name="guided_accessibility_desc">در صفحه بعدی، وارد بخش «برنامه‌های دانلود شده» (یا خدمات نصب‌شده) شوید، «کاتالیست» را انتخاب کرده و آن را روشن کنید.</string>
+    <string name="guided_overlay_desc">در صفحه بعدی، «کاتالیست» را پیدا کرده و گزینه «اجازه نمایش روی سایر برنامه‌ها» را روشن کنید.</string>
+    <string name="guided_exact_alarm_desc">در صفحه بعدی، گزینه «اجازه تنظیم هشدارها و یادآورها» را روشن کنید تا هشدارهای کارها سر وقت به صدا درآیند.</string>
+    <string name="guided_notifications_desc">در صفحه بعدی، اعلان‌های کاتالیست را فعال کنید.</string>
+    <string name="guided_mic_desc">دسترسی میکروفون برای ثبت صوتی کارها لازم است. لطفاً از طریق دکمه زیر در تنظیمات برنامه، دسترسی میکروفون را مجاز کنید.</string>
+    <string name="guided_battery_desc">در کادر باز شده، گزینه «مجاز» (Allow) را انتخاب کنید تا فعالیت کاتالیست در پس‌زمینه متوقف نشود.</string>
+    <string name="guided_open_settings">رفتن به تنظیمات</string>
+    <string name="guided_skip_step">رد کردن این مرحله</string>
+    <string name="guided_try_again">تلاش دوباره</string>
+    <string name="guided_not_enabled_warning">این مجوز هنوز فعال نشده است.</string>
+    <string name="all_permissions_granted_toast">تمامی مجوزها با موفقیت فعال شدند!</string>
+    <string name="open_app_settings">تنظیمات برنامه</string>
 
     <!-- Session History Screen -->
     <string name="session_history_title">تاریخچه جلسات</string>
@@ -423,6 +440,8 @@
     <string name="delete_session_confirm">آیا از حذف این رکورد جلسه مطمئن هستید؟</string>
     <string name="assigned_app_indicator">برنامه متصل</string>
     <string name="linked_app">برنامه متصل</string>
+    <string name="doomscrolling_settings_title">هشدار دوم‌اسکرولینگ اینستاگرام</string>
+    <string name="doomscrolling_settings_desc">تشخیص اسکرول بی‌هدف در اینستاگرام و نمایش گفتگوی هوشیاری برای کمک به آگاهی شما</string>
     <string name="doomscrolling_alert_title">گفتگوی هشدار دوم‌اسکرولینگ</string>
     <string name="doomscrolling_alert_desc">تشخیص اسکرول ریلز اینستاگرام و نمایش گفتگوی هوشیاری</string>
     <string name="doomscrolling_stats_summary">%1$d ویدیو • %2$s</string>
@@ -433,6 +452,164 @@
     <string name="doomscrolling_avg_time">میانگین زمان هر ویدیو</string>
     <string name="doomscrolling_history_title">تاریخچه ویدیوهای ثبت‌شده</string>
     <string name="doomscrolling_no_records">هنوز ویدیوی وب‌گردی بی‌هدف ثبت نشده است</string>
+    <string name="doomscrolling_day_total">مجموع روز</string>
+    <string name="doomscrolling_sessions_count">%1$d جلسه</string>
     <string name="clear_history">پاک کردن تاریخچه</string>
     <string name="clear_history_confirm">آیا از پاک کردن تاریخچه وب‌گردی بی‌هدف مطمئن هستید؟</string>
-</resources>
+
+    <!-- Session History & Split / Reconstruct -->
+    <string name="reconstruct_daily_sessions">بازیابی جلسات روزانه</string>
+    <string name="reconstruct_daily_sessions_desc">فعالیت در چندین روز گذشته شناسایی شد. برای تفکیک این جلسه تجمیع شده به جلسات مجزای هر روز ضربه بزنید.</string>
+    <string name="reconstruct_success">%1$d جلسه روزانه با موفقیت تفکیک و بازیابی شد.</string>
+    <string name="split_session_title">تفکیک جلسه در روزها</string>
+    <string name="split_session_desc">تقسیم این جلسه تجمیع شده به چند جلسه روزانه مجزا.</string>
+    <string name="split_days_count">%1$d روز</string>
+    <string name="split_daily_preview">حدود %1$s در هر روز</string>
+    <string name="split_action">تفکیک جلسه</string>
+    <string name="split_success">جلسه با موفقیت بین %1$d روز تفکیک شد.</string>
+    <string name="split_from_activity">بازیابی خودکار از تاریخچه فعالیت (%1$d روز شناسایی شد)</string>
+    <string name="split_tooltip">تفکیک بین روزها</string>
+
+    <string name="doomscroll_warning_title">⚠️ هشدار اسکرول بی‌هدف</string>
+    <string name="doomscroll_warning_subtitle">شما در حال اسکرول بی‌پایان ریلز هستید</string>
+    <string name="doomscroll_warning_time_label">زمان صرف‌شده برای اسکرول</string>
+    <string name="doomscroll_warning_question">آیا می‌خواهید وقت خود را اینگونه صرف کنید؟</string>
+    <string name="doomscroll_btn_intentional">هدفمند هستم</string>
+    <string name="doomscroll_btn_doomscrolling">دارم بی‌هدف اسکرول می‌کنم</string>
+    <string name="doomscroll_encouragement_title">روی کارهای مهم تمرکز کنید!</string>
+    <string name="doomscroll_encouragement_desc">شما تایید کردید که در حال اسکرول بی‌هدف هستید. اجازه ندهید الگوریتم‌ها وقت باارزش شما را هدر دهند؛ کارهای مهم منتظر شما هستند!</string>
+    <string name="doomscroll_high_priority_tasks">کارهای با اولویت بالا</string>
+    <string name="doomscroll_start_focus">شروع تمرکز</string>
+    <string name="doomscroll_no_tasks">هیچ کار انجام‌نشده‌ای ندارید. در کاتالیست کار جدیدی ثبت کنید!</string>
+    <string name="doomscroll_create_task">ورود به کاتالیست</string>
+    <string name="doomscroll_dismiss_later">بعداً انجام می‌دهم</string>
+    <string name="doomscroll_got_it">متوجه شدم</string>
+    <string name="high_priority_badge">اولویت بالا</string>
+
+    <!-- NFC Feature -->
+    <string name="nfc_section_title">انتقال اطلاعات با کارت NFC</string>
+    <string name="nfc_section_subtitle">پشتیبان‌گیری و انتقال با تگ‌های NFC</string>
+    <string name="nfc_section_desc">خواندن و نوشتن کارها، یادداشت‌ها یا نسخه پشتیبان با استفاده از کارت یا تگ فیزیکی NFC.</string>
+    <string name="nfc_status_ready">NFC آماده است</string>
+    <string name="nfc_status_disabled">NFC غیرفعال است</string>
+    <string name="nfc_status_unsupported">NFC پشتیبانی نمی‌شود</string>
+    <string name="nfc_btn_enable">فعال‌سازی NFC</string>
+    <string name="nfc_btn_write">نوشتن روی کارت</string>
+    <string name="nfc_btn_read">خواندن از کارت</string>
+    <string name="nfc_write_card_desc">ذخیره کارهای مهم یا نسخه پشتیبان کامل</string>
+    <string name="nfc_read_card_desc">پیش‌نمایش و بازیابی اطلاعات از کارت</string>
+    <string name="nfc_write_dialog_title">نوشتن اطلاعات روی کارت NFC</string>
+    <string name="nfc_read_dialog_title">خواندن اطلاعات از کارت NFC</string>
+    <string name="nfc_select_payload_title">انتخاب اطلاعات جهت نوشتن</string>
+    <string name="nfc_mode_quick">کارهای مهم و تمرکز</string>
+    <string name="nfc_mode_quick_desc">کارهای اولویت‌دار فعال (حدود ۲۰۰ تا ۳۵۰ بایت، سازگار با همه تگ‌ها)</string>
+    <string name="nfc_mode_custom">انتخاب سفارشی</string>
+    <string name="nfc_mode_custom_desc">انتخاب دستی کارها و یادداشت‌ها</string>
+    <string name="nfc_mode_full">پشتیبان کامل برنامه</string>
+    <string name="nfc_mode_full_desc">تمام کارها و یادداشت‌ها به‌صورت فشرده‌شده با GZIP</string>
+    <string name="nfc_payload_size_badge">حجم داده: %1$d بایت</string>
+    <string name="nfc_tag_fit_hint_ntag213">قابل ذخیره روی NTAG213 (۱۴۴ بایت) و بالاتر</string>
+    <string name="nfc_tag_fit_hint_ntag215">قابل ذخیره روی NTAG215 (۵۰۴ بایت) و بالاتر</string>
+    <string name="nfc_tag_fit_hint_ntag216">نیازمند کارت NTAG216 (۸۸۸ بایت) یا ظرفیت بالاتر</string>
+    <string name="nfc_tap_prompt_write">گوشی را نزدیک کارت NFC نگه دارید تا اطلاعات نوشته شود...</string>
+    <string name="nfc_tap_prompt_read">گوشی را نزدیک کارت NFC نگه دارید تا اطلاعات خوانده شود...</string>
+    <string name="nfc_writing_in_progress">در حال نوشتن روی کارت، گوشی را ثابت نگه دارید...</string>
+    <string name="nfc_reading_in_progress">در حال خواندن از کارت، گوشی را ثابت نگه دارید...</string>
+    <string name="nfc_write_success">اطلاعات با موفقیت روی کارت NFC نوشته شد!</string>
+    <string name="nfc_read_success">کارت NFC با موفقیت خوانده شد!</string>
+    <string name="nfc_err_readonly">این کارت قفل شده یا فقط‌خواندنی است.</string>
+    <string name="nfc_err_insufficient_space">فضای کارت کافی نیست: داده به %1$d بایت نیاز دارد، فضای کارت %2$d بایت است.</string>
+    <string name="nfc_err_tag_lost">ارتباط با کارت قطع شد. لطفاً کارت را ثابت نگه دارید و دوباره تلاش کنید.</string>
+    <string name="nfc_err_no_catalyst_data">هیچ اطلاعات معتبری از کاتالیست روی این کارت یافت نشد.</string>
+    <string name="nfc_err_general">خطا در انتقال NFC: %1$s</string>
+    <string name="nfc_preview_title">پیش‌نمایش محتوای کارت</string>
+    <string name="nfc_preview_tasks_count">%1$d کار</string>
+    <string name="nfc_preview_notes_count">%1$d یادداشت</string>
+    <string name="nfc_preview_categories_count">%1$d دسته‌بندی</string>
+    <string name="nfc_action_merge">ترکیب (حفظ اطلاعات فعلی)</string>
+    <string name="nfc_action_restore">جایگزینی کامل</string>
+    <string name="nfc_restore_confirm_title">آیا مطمئنید تمام اطلاعات فعلی جایگزین شود؟</string>
+    <string name="nfc_restore_confirm_desc">این کار تمام کارها، دسته‌بندی‌ها و یادداشت‌های فعلی شما را با داده‌های موجود روی کارت NFC جایگزین خواهد کرد.</string>
+    <string name="nfc_retry">تلاش مجدد</string>
+    <string name="nfc_empty_selection">هیچ موردی برای نوشتن انتخاب نشده است.</string>
+
+    <!-- Power Button Quick Access Feature -->
+    <string name="power_button_shortcut_title">دسترسی سریع با دکمه پاور</string>
+    <string name="power_button_shortcut_desc">مشاهده فوری کارهای با اولویت بالا با فشردن یا نگه‌داشتن دکمه فیزیکی پاور گوشی خارج از برنامه.</string>
+    <string name="power_shortcut_off">غیرفعال</string>
+    <string name="power_shortcut_off_desc">میانبر خاموش است</string>
+    <string name="power_shortcut_double_press">دو بار فشردن پاور</string>
+    <string name="power_shortcut_double_press_desc">جایگزینی میانبر دوربین با کارهای فوری کاتالیست</string>
+    <string name="power_shortcut_long_press">فشردن طولانی پاور</string>
+    <string name="power_shortcut_long_press_desc">جایگزینی دستیار دیجیتال یا منوی پاور با کاتالیست</string>
+    <string name="power_shortcut_hint_double">دکمه جانبی گوشی خود را طوری تنظیم کنید که با دو بار فشردن، کاتالیست باز شود:</string>
+    <string name="power_shortcut_hint_long">گوشی خود را طوری تنظیم کنید که با نگه‌داشتن دکمه پاور، کاتالیست باز شود:</string>
+    <string name="power_shortcut_accessibility_required">نیازمند فعال بودن سرویس دسترسی هوشمند کاتالیست است.</string>
+    <string name="power_shortcut_enable_accessibility">فعال‌سازی سرویس هوشمند</string>
+    <string name="quick_tasks_title">کارهای با اولویت بالا</string>
+    <string name="quick_tasks_subtitle">مهم‌ترین کارهای در انتظار انجام</string>
+    <string name="quick_tasks_empty">همه کارهای با اولویت بالا انجام شده‌اند!</string>
+    <string name="quick_tasks_empty_sub">عالی است! از وقت خود لذت ببرید یا کار جدیدی در کاتالیست ثبت کنید.</string>
+    <string name="quick_tasks_open_app">ورود به کاتالیست</string>
+    <string name="quick_tasks_focus_btn">شروع تمرکز</string>
+    <string name="quick_tasks_completed_toast">کار انجام شد!</string>
+    <string name="quick_tab_tasks">کارها</string>
+    <string name="quick_tab_notes">یادداشت‌ها</string>
+    <string name="quick_notes_title">یادداشت‌های سریع</string>
+    <string name="quick_notes_subtitle">یادداشت‌ها و افکار اخیر شما</string>
+    <string name="quick_notes_empty">هنوز یادداشتی ثبت نشده است!</string>
+    <string name="quick_notes_empty_sub">ایده‌ها و افکار خود را سریعاً اینجا ثبت کنید.</string>
+    <string name="quick_add_task_btn">کار جدید</string>
+    <string name="quick_add_note_btn">یادداشت جدید</string>
+    <string name="quick_tasks_saved_toast">کار با موفقیت ذخیره شد!</string>
+    <string name="quick_notes_saved_toast">یادداشت با موفقیت ذخیره شد!</string>
+    <string name="quick_note_untitled">بدون عنوان</string>
+    <string name="power_shortcut_active">فعال</string>
+    <string name="power_shortcut_open_phone_settings">باز کردن تنظیمات دکمه جانبی</string>
+    <string name="power_shortcut_open_phone_settings_desc">تنظیم دکمه جانبی گوشی در تنظیمات سیستم:</string>
+    <string name="power_shortcut_hint_double_native">سامسونگ: تنظیمات ← ویژگی‌های پیشرفته ← دکمه جانبی ← دو بار فشردن ← باز کردن برنامه ← کاتالیست.\nشیائومی: تنظیمات ← تنظیمات اضافی ← میانبرهای حرکتی.\nسایر گوشی‌ها: دو بار فشردن دکمه پاور، میانبر پیش‌فرض دوربین را با کاتالیست جایگزین می‌کند.</string>
+    <string name="power_shortcut_hint_long_native">کاتالیست را به عنوان دستیار دیجیتال پیش‌فرض تنظیم کنید تا با نگه‌داشتن دکمه پاور، کارهای فوری مستقیماً در هر جای گوشی باز شوند.</string>
+    <string name="power_shortcut_set_default_assistant">تنظیم به عنوان دستیار پیش‌فرض</string>
+    <string name="power_shortcut_overlay_permission_title">مجوز نمایش روی سایر برنامه‌ها</string>
+    <string name="power_shortcut_overlay_permission_desc">جهت باز شدن سریع کارهای فوری روی صفحه قفل و سایر برنامه‌ها هنگام فشردن دکمه پاور.</string>
+    <string name="power_shortcut_grant_permission">اعطای مجوز</string>
+    <string name="power_shortcut_test_btn">پیش‌نمایش پنجره سریع</string>
+    <string name="power_shortcut_disabled_toast">میانبر دکمه پاور غیرفعال شد</string>
+    <string name="power_shortcut_disabled_info_title">میانبر غیرفعال است</string>
+    <string name="power_shortcut_disabled_info_desc">میانبرهای کاتالیست خاموش شدند. در صورتی که قبلاً کاتالیست را به‌عنوان دستیار دیجیتال یا دکمه جانبی در تنظیمات گوشی انتخاب کرده بودید، می‌توانید دستیار پیش‌فرض یا گوگل را بازگردانید.</string>
+    <string name="power_shortcut_restore_assistant">تنظیمات دستیار صوتی گوشی</string>
+
+    <!-- Redesigned NFC Write Dialog Strings -->
+    <string name="nfc_write_dialog_subtitle">داده‌هایی را که می‌خواهید روی کارت یا برچسب NFC ذخیره شود انتخاب کنید.</string>
+    <string name="nfc_data_size_label">حجم تخمینی داده</string>
+    <string name="nfc_btn_continue_write">مرحله بعد: اسکن کارت</string>
+    <string name="nfc_step_scan_title">آماده نوشتن روی کارت</string>
+    <string name="nfc_step_scan_desc">پشت گوشی خود را نزدیک کارت یا برچسب NFC نگه دارید تا انتقال اطلاعات انجام شود.</string>
+    <string name="nfc_do_not_move">در حین انتقال، گوشی و کارت را ثابت نگه دارید</string>
+    <string name="nfc_write_success_title">اطلاعات با موفقیت ذخیره شد!</string>
+    <string name="nfc_write_success_desc">داده‌های انتخابی شما با موفقیت روی کارت NFC نوشته شد.</string>
+    <string name="nfc_write_error_title">خطا در نوشتن روی کارت</string>
+
+    <!-- Redesigned Custom AI Prompts Strings -->
+    <string name="custom_ai_prompts_desc">تنظیم دستورات پیش‌فرض برای تحلیل عملکرد و خلاصه روزانه هوشمند</string>
+    <string name="intelligence_hub_prompt_desc">تنظیم راهنمای تحلیل بهره‌وری، روندهای هفتگی و پیشنهادهای هوش مصنوعی</string>
+    <string name="daily_digest_prompt_desc">تنظیم ساختار خلاصه‌سازی دستاوردها و عملکرد روزانه</string>
+    <string name="prompt_status_custom">سفارشی</string>
+    <string name="prompt_status_default">پیش‌فرض</string>
+    <string name="reset_to_default_btn">بازنشانی به پیش‌فرض</string>
+    <string name="prompt_variables_title">درج متغیرها</string>
+    <string name="prompt_saved">دستور با موفقیت ذخیره شد</string>
+    <string name="prompt_reset">به دستور پیش‌فرض بازگردانده شد</string>
+    <string name="tap_to_expand_prompt">برای مشاهده یا ویرایش ضربه بزنید</string>
+
+    <!-- Floating Task Bar Feature -->
+    <string name="floating_task_bar_title">نوار شناور کار</string>
+    <string name="floating_task_bar_desc">نمایش این کار روی برنامه‌های دیگر تا فراموش نکنید الان چه کاری باید انجام دهید</string>
+    <string name="floating_task_bar_active">در حال نمایش در نوار شناور</string>
+    <string name="floating_task_bar_close">بستن نوار شناور</string>
+    <string name="floating_task_bar_permission_required">برای نمایش نوار شناور، لطفاً مجوز نمایش روی سایر برنامه‌ها را فعال کنید.</string>
+    <string name="floating_task_bar_completed">کار انجام شد!</string>
+    <string name="floating_task_bar_open">مشاهده کار</string>
+    <string name="floating_task_bar_minimize">کوچک کردن نوار</string>
+    <string name="floating_task_bar_expand">بزرگ کردن پنجره</string>
+</resources>

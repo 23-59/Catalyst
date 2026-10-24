@@ -120,6 +120,10 @@ class TodoRepository(
         return doomscrollVideoDao?.insertRecord(record) ?: -1L
     }
 
+    suspend fun getDoomscrollDurationSince(sinceTimestamp: Long): Long {
+        return doomscrollVideoDao?.getTotalDurationSince(sinceTimestamp) ?: 0L
+    }
+
     suspend fun clearAllDoomscrollRecords() {
         doomscrollVideoDao?.clearAllRecords()
     }
